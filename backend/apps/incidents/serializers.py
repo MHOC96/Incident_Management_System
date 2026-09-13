@@ -3,7 +3,14 @@ from rest_framework import serializers
 from apps.accounts.models import User
 from apps.assignments.models import Assignment, ResponsibleParty
 from apps.common.choices import AccountStatus, IncidentPriority, UserRole
-from apps.incidents.models import Category, Incident, IncidentImage, Location
+from apps.incidents.models import (
+    Category,
+    Incident,
+    IncidentImage,
+    IncidentRevision,
+    IncidentRevisionStatus,
+    Location,
+)
 
 
 def get_current_assignment_data(obj):
@@ -58,6 +65,49 @@ class IncidentImageSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class IncidentRevisionSerializer(serializers.ModelSerializer):
+    submitted_by_name = serializers.CharField(source="submitted_by.name", read_only=True)
+    reviewed_by_name = serializers.CharField(source="reviewed_by.name", read_only=True)
+    changes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = IncidentRevision
+        fields = [
+            "id",
+            "status",
+            "changes",
+            "submitted_by_name",
+            "submitted_at",
+            "reviewed_by_name",
+            "reviewed_at",
+            "review_comment",
+        ]
+        read_only_fields = fields
+
+    def get_changes(self, obj):
+        values = [
+            ("title", "Title", obj.original_title, obj.proposed_title),
+            ("description", "Description", obj.original_description, obj.proposed_description),
+            ("category", "Category", obj.original_category.name, obj.proposed_category.name),
+            ("location", "Location", obj.original_location.name, obj.proposed_location.name),
+            (
+                "visibility",
+                "Visibility",
+                obj.get_original_visibility_display(),
+                obj.get_proposed_visibility_display(),
+            ),
+        ]
+        return [
+            {"field": field, "label": label, "before": before, "after": after}
+            for field, label, before, after in values
+            if before != after
+        ]
+
+
+class IncidentRevisionDecisionSerializer(serializers.Serializer):
+    comment = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+
 class PublicIncidentSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     location = LocationSerializer(read_only=True)
@@ -94,6 +144,8 @@ class IncidentAdminReviewSerializer(serializers.ModelSerializer):
     location = LocationSerializer(read_only=True)
     images = IncidentImageSerializer(many=True, read_only=True)
     reporter = ReporterAdminSerializer(read_only=True)
+    pending_revision = serializers.SerializerMethodField()
+    revision_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Incident
@@ -109,6 +161,13 @@ class IncidentAdminReviewSerializer(serializers.ModelSerializer):
             "visibility",
             "reporter",
             "images",
+            "admin_review_note",
+            "progress_note",
+            "resolution_statement",
+            "closure_note",
+            "reopen_reason",
+            "pending_revision",
+            "revision_history",
             "created_at",
             "updated_at",
             "verified_at",
@@ -116,6 +175,13 @@ class IncidentAdminReviewSerializer(serializers.ModelSerializer):
             "closed_at",
         ]
         read_only_fields = fields
+
+    def get_pending_revision(self, obj):
+        revision = obj.revisions.filter(status=IncidentRevisionStatus.PENDING).first()
+        return IncidentRevisionSerializer(revision).data if revision else None
+
+    def get_revision_history(self, obj):
+        return IncidentRevisionSerializer(obj.revisions.all(), many=True).data
 
 
 class IncidentDetailSerializer(serializers.ModelSerializer):
@@ -139,6 +205,11 @@ class IncidentDetailSerializer(serializers.ModelSerializer):
             "reporter",
             "reporter_name",
             "images",
+            "admin_review_note",
+            "progress_note",
+            "resolution_statement",
+            "closure_note",
+            "reopen_reason",
             "created_at",
             "updated_at",
             "verified_at",
@@ -185,12 +256,25 @@ class IncidentOfficialDetailSerializer(IncidentDetailSerializer):
 
 class IncidentStudentDetailSerializer(IncidentDetailSerializer):
     current_assignment = serializers.SerializerMethodField()
+    pending_revision = serializers.SerializerMethodField()
+    revision_history = serializers.SerializerMethodField()
 
     class Meta(IncidentDetailSerializer.Meta):
-        fields = IncidentDetailSerializer.Meta.fields + ["current_assignment"]
+        fields = IncidentDetailSerializer.Meta.fields + [
+            "current_assignment",
+            "pending_revision",
+            "revision_history",
+        ]
 
     def get_current_assignment(self, obj):
         return get_current_assignment_data(obj)
+
+    def get_pending_revision(self, obj):
+        revision = obj.revisions.filter(status=IncidentRevisionStatus.PENDING).first()
+        return IncidentRevisionSerializer(revision).data if revision else None
+
+    def get_revision_history(self, obj):
+        return IncidentRevisionSerializer(obj.revisions.all(), many=True).data
 
 
 class IncidentCreateSerializer(serializers.ModelSerializer):
@@ -261,15 +345,26 @@ class IncidentCreateSerializer(serializers.ModelSerializer):
         return Location.objects.create(name=name, is_active=True)
 
 
+class IncidentStudentUpdateSerializer(IncidentCreateSerializer):
+    class Meta(IncidentCreateSerializer.Meta):
+        fields = IncidentCreateSerializer.Meta.fields
+
+    def create(self, validated_data):
+        raise NotImplementedError
+
+    def resolve_values(self):
+        values = dict(self.validated_data)
+        location_name = values.pop("location_name", None)
+        if location_name:
+            values["location"] = self._resolve_location(location_name)
+        return values
+
+
 class IncidentActionSerializer(serializers.Serializer):
     comment = serializers.CharField(required=False, allow_blank=True)
 
 
 class IncidentRejectSerializer(serializers.Serializer):
-    comment = serializers.CharField(required=True, min_length=5)
-
-
-class IncidentRequestInfoSerializer(serializers.Serializer):
     comment = serializers.CharField(required=True, min_length=5)
 
 

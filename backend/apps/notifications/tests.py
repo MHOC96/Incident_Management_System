@@ -4,7 +4,6 @@ from rest_framework.test import APIClient
 
 from apps.assignments.services import assign_incident
 from apps.common.choices import IncidentStatus, NotificationType, UserRole
-from apps.communications.models import Message
 from apps.incidents.models import Category, Incident, Location
 from apps.notifications.models import Notification
 
@@ -71,40 +70,6 @@ class NotificationFlowTests(TestCase):
             ).exists()
         )
 
-    def test_message_notifies_participants(self):
-        self.incident.status = IncidentStatus.FORWARDED_TO_DEAN
-        self.incident.save(update_fields=["status", "updated_at"])
-        assign_incident(
-            self.incident,
-            assigned_official=self.official,
-            assigned_by=self.dean,
-            comment="Please inspect.",
-        )
-
-        self.client.force_authenticate(user=self.official)
-        response = self.client.post(
-            f"/api/incidents/{self.incident.id}/messages/",
-            {"content": "Technician has been scheduled."},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 201)
-        self.assertTrue(
-            Notification.objects.filter(
-                user=self.student,
-                notification_type=NotificationType.NEW_MESSAGE,
-                related_incident=self.incident,
-            ).exists()
-        )
-
-    def test_internal_messages_are_rejected(self):
-        self.client.force_authenticate(user=self.admin)
-        response = self.client.post(
-            f"/api/incidents/{self.incident.id}/messages/",
-            {"content": "Staff-only assessment of the damage.", "is_internal": True},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 400)
-
     def test_mark_notification_read(self):
         notification = Notification.objects.create(
             user=self.student,
@@ -128,7 +93,7 @@ class NotificationFlowTests(TestCase):
             user=self.student,
             title="Unread",
             message="Unread message",
-            notification_type=NotificationType.NEW_MESSAGE,
+            notification_type=NotificationType.INCIDENT_STATUS_CHANGED,
             related_incident=self.incident,
         )
         self.client.force_authenticate(user=self.student)
@@ -141,7 +106,7 @@ class NotificationFlowTests(TestCase):
             user=self.student,
             title="Unread one",
             message="First unread message",
-            notification_type=NotificationType.NEW_MESSAGE,
+            notification_type=NotificationType.INCIDENT_STATUS_CHANGED,
             related_incident=self.incident,
         )
         Notification.objects.create(
@@ -180,9 +145,4 @@ class NotificationFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.incident.refresh_from_db()
         self.assertEqual(self.incident.status, IncidentStatus.IN_PROGRESS)
-        self.assertTrue(
-            Message.objects.filter(
-                incident=self.incident,
-                sender=self.dean,
-            ).exists()
-        )
+        self.assertEqual(self.incident.reopen_reason, "Please finish remaining repairs.")

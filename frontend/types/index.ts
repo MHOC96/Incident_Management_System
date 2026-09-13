@@ -117,6 +117,31 @@ export type IncidentVoteResult = {
 export type IncidentDetail = PublicIncident & {
   reporter: number;
   reporter_name: string;
+  admin_review_note: string;
+  progress_note: string;
+  resolution_statement: string;
+  closure_note: string;
+  reopen_reason: string;
+};
+
+export type IncidentRevisionStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export type IncidentRevisionChange = {
+  field: "title" | "description" | "category" | "location" | "visibility";
+  label: string;
+  before: string;
+  after: string;
+};
+
+export type IncidentRevision = {
+  id: number;
+  status: IncidentRevisionStatus;
+  changes: IncidentRevisionChange[];
+  submitted_by_name: string;
+  submitted_at: string;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_comment: string;
 };
 
 export type ReporterAdmin = {
@@ -129,6 +154,8 @@ export type ReporterAdmin = {
 
 export type AdminIncidentReview = Omit<IncidentDetail, "reporter" | "reporter_name"> & {
   reporter: ReporterAdmin;
+  pending_revision: IncidentRevision | null;
+  revision_history: IncidentRevision[];
 };
 
 export type AdminReviewStats = {
@@ -136,6 +163,7 @@ export type AdminReviewStats = {
   verified: number;
   forwarded_to_dean: number;
   rejected: number;
+  pending_changes: number;
 };
 
 export type Assignment = {
@@ -207,24 +235,6 @@ export type OfficialStats = {
   total_assigned: number;
 };
 
-export type MessageChannel =
-  | "STUDENT_ADMIN"
-  | "STUDENT_DEAN"
-  | "STUDENT_OFFICIAL"
-  | "STAFF_INTERNAL";
-
-export type IncidentMessage = {
-  id: number;
-  incident: number;
-  sender: number;
-  sender_name: string;
-  sender_role: UserRole;
-  channel: MessageChannel;
-  content: string;
-  is_internal: boolean;
-  created_at: string;
-};
-
 export type NotificationType =
   | "INCIDENT_SUBMITTED"
   | "INCIDENT_VERIFIED"
@@ -232,8 +242,7 @@ export type NotificationType =
   | "INCIDENT_ASSIGNED"
   | "INCIDENT_STATUS_CHANGED"
   | "INCIDENT_RESOLVED"
-  | "INCIDENT_CLOSED"
-  | "NEW_MESSAGE";
+  | "INCIDENT_CLOSED";
 
 export type Notification = {
   id: number;
@@ -247,6 +256,8 @@ export type Notification = {
 
 export type StudentIncident = IncidentDetail & {
   current_assignment: Assignment | null;
+  pending_revision: IncidentRevision | null;
+  revision_history: IncidentRevision[];
 };
 
 export type IncidentCreatePayload = {
@@ -256,3 +267,5 @@ export type IncidentCreatePayload = {
   location_name: string;
   visibility: IncidentVisibility;
 };
+
+export type IncidentUpdatePayload = IncidentCreatePayload;

@@ -24,11 +24,18 @@ from apps.common.authorization import (
     user_can_start_progress_incident,
     user_can_verify_incident,
 )
-from apps.common.choices import IncidentStatus, MessageChannel, NotificationType, UserRole
+from apps.common.choices import IncidentStatus, NotificationType, UserRole
 from apps.common.permissions import IsActiveUser, IsAdmin, IsDean, IsOfficial, IsStaffRole, IsStudent
-from apps.communications.models import Message
 from apps.incidents.cloudinary_service import upload_incident_image
-from apps.incidents.models import Category, Incident, IncidentImage, IncidentVote, Location
+from apps.incidents.models import (
+    Category,
+    Incident,
+    IncidentImage,
+    IncidentRevision,
+    IncidentRevisionStatus,
+    IncidentVote,
+    Location,
+)
 from apps.incidents.permissions import IncidentObjectPermission
 from apps.incidents.serializers import (
     CategorySerializer,
@@ -42,16 +49,16 @@ from apps.incidents.serializers import (
     IncidentOfficialDetailSerializer,
     IncidentPriorityUpdateSerializer,
     IncidentRejectSerializer,
-    IncidentRequestInfoSerializer,
+    IncidentRevisionDecisionSerializer,
     IncidentResolveSerializer,
     IncidentStudentDetailSerializer,
+    IncidentStudentUpdateSerializer,
     LocationSerializer,
     PublicIncidentSerializer,
 )
 from apps.incidents.services import (
     InvalidStatusTransitionError,
     admin_reject_incident,
-    admin_request_more_information,
     admin_verify_and_forward,
     is_valid_status_transition,
     transition_incident,
@@ -62,7 +69,7 @@ from apps.incidents.querysets import (
 )
 from apps.incidents.utils import generate_incident_number
 from apps.notifications.models import Notification
-from apps.notifications.services import notify_admins_of_submission
+from apps.notifications.services import notify_admins_of_revision, notify_admins_of_submission
 
 PENDING_REVIEW_STATUSES = {
     IncidentStatus.SUBMITTED,
@@ -89,7 +96,7 @@ class LocationListView(generics.ListAPIView):
 
 
 class IncidentViewSet(viewsets.ModelViewSet):
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     permission_classes = [IsActiveUser, IncidentObjectPermission]
 
     def get_throttles(self):
@@ -121,21 +128,25 @@ class IncidentViewSet(viewsets.ModelViewSet):
             return IncidentCreateSerializer
         if self.action in {"list_public", "retrieve_public"}:
             return PublicIncidentSerializer
-        if self.action in {"retrieve", "pending_review"} and self.request.user.role == UserRole.ADMIN:
+        if self.action in {
+            "retrieve", "pending_review", "pending_changes", "forwarded_reports", "rejected_reports"
+        } and self.request.user.role == UserRole.ADMIN:
             return IncidentAdminReviewSerializer
         if self.request.user.is_authenticated and self.request.user.role == UserRole.ADMIN:
-            if self.action in {"verify", "reject", "request_info"}:
+            if self.action in {"verify", "reject", "approve_changes", "reject_changes"}:
                 return IncidentAdminReviewSerializer
         return IncidentDetailSerializer
 
     def get_permissions(self):
         if self.action in {"list_public", "retrieve_public"}:
             return [permissions.AllowAny()]
-        if self.action == "create":
+        if self.action in {"create", "destroy"}:
             return [IsStudent()]
         if self.action == "toggle_vote":
             return [IsStudent()]
-        if self.action in {"pending_review", "review_stats"}:
+        if self.action in {
+            "pending_review", "pending_changes", "forwarded_reports", "rejected_reports", "review_stats"
+        }:
             return [IsAdmin()]
         if self.action in {
             "dean_stats",
@@ -179,6 +190,20 @@ class IncidentViewSet(viewsets.ModelViewSet):
         serializer.save()
         return Response(IncidentDeanDetailSerializer(incident).data)
 
+    def destroy(self, request, *args, **kwargs):
+        incident = self.get_object()
+        if incident.status not in {
+            IncidentStatus.SUBMITTED,
+            IncidentStatus.UNDER_REVIEW,
+            IncidentStatus.REJECTED,
+        }:
+            return Response(
+                {"detail": "Reports cannot be deleted after they have been approved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        incident.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def perform_create(self, serializer):
         with transaction.atomic():
             serializer.save(
@@ -208,37 +233,6 @@ class IncidentViewSet(viewsets.ModelViewSet):
             message=message,
             notification_type=notification_type,
             related_incident=incident,
-        )
-
-    def _add_review_message(
-        self,
-        incident,
-        sender,
-        content,
-        *,
-        is_internal=False,
-        channel=None,
-    ):
-        if not content.strip():
-            return
-
-        resolved_channel = channel
-        if resolved_channel is None:
-            if sender.role == UserRole.ADMIN:
-                resolved_channel = MessageChannel.STUDENT_ADMIN
-            elif sender.role == UserRole.DEAN:
-                resolved_channel = MessageChannel.STUDENT_DEAN
-            elif sender.role == UserRole.OFFICIAL:
-                resolved_channel = MessageChannel.STUDENT_OFFICIAL
-            else:
-                resolved_channel = MessageChannel.STUDENT_ADMIN
-
-        Message.objects.create(
-            incident=incident,
-            sender=sender,
-            content=content.strip(),
-            channel=resolved_channel,
-            is_internal=False,
         )
 
     @action(detail=False, methods=["get"], url_path="official-stats")
@@ -343,6 +337,42 @@ class IncidentViewSet(viewsets.ModelViewSet):
         serializer = IncidentAdminReviewSerializer(page, many=True)
         return self.get_paginated_response(serializer.data)
 
+    @action(detail=False, methods=["get"], url_path="pending-changes")
+    def pending_changes(self, request):
+        queryset = self.get_queryset().filter(
+            revisions__status=IncidentRevisionStatus.PENDING
+        ).distinct().order_by("revisions__submitted_at")
+        page = self.paginate_queryset(queryset)
+        return self.get_paginated_response(
+            IncidentAdminReviewSerializer(page, many=True).data
+        )
+
+    @action(detail=False, methods=["get"], url_path="forwarded-reports")
+    def forwarded_reports(self, request):
+        queryset = self.get_queryset().filter(
+            status__in={
+                IncidentStatus.FORWARDED_TO_DEAN,
+                IncidentStatus.ASSIGNED,
+                IncidentStatus.IN_PROGRESS,
+                IncidentStatus.RESOLVED,
+                IncidentStatus.CLOSED,
+            }
+        ).order_by("-updated_at")
+        page = self.paginate_queryset(queryset)
+        return self.get_paginated_response(
+            IncidentAdminReviewSerializer(page, many=True).data
+        )
+
+    @action(detail=False, methods=["get"], url_path="rejected-reports")
+    def rejected_reports(self, request):
+        queryset = self.get_queryset().filter(
+            status=IncidentStatus.REJECTED
+        ).order_by("-updated_at")
+        page = self.paginate_queryset(queryset)
+        return self.get_paginated_response(
+            IncidentAdminReviewSerializer(page, many=True).data
+        )
+
     @action(detail=False, methods=["get"], url_path="review-stats")
     def review_stats(self, request):
         queryset = self.get_queryset()
@@ -350,16 +380,151 @@ class IncidentViewSet(viewsets.ModelViewSet):
             queryset.aggregate(
                 pending_verification=Count(
                     "id",
+                    distinct=True,
                     filter=Q(status__in=PENDING_REVIEW_STATUSES),
                 ),
-                verified=Count("id", filter=Q(status=IncidentStatus.VERIFIED)),
+                verified=Count("id", distinct=True, filter=Q(status=IncidentStatus.VERIFIED)),
                 forwarded_to_dean=Count(
                     "id",
+                    distinct=True,
                     filter=Q(status=IncidentStatus.FORWARDED_TO_DEAN),
                 ),
-                rejected=Count("id", filter=Q(status=IncidentStatus.REJECTED)),
+                rejected=Count("id", distinct=True, filter=Q(status=IncidentStatus.REJECTED)),
+                pending_changes=Count(
+                    "id",
+                    distinct=True,
+                    filter=Q(revisions__status=IncidentRevisionStatus.PENDING),
+                ),
             )
         )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="submit-changes",
+        permission_classes=[IsStudent],
+    )
+    def submit_changes(self, request, pk=None):
+        incident = self.get_object()
+        if incident.reporter_id != request.user.id:
+            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+        if incident.revisions.filter(status=IncidentRevisionStatus.PENDING).exists():
+            return Response(
+                {"detail": "Changes are already waiting for admin review."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = IncidentStudentUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.resolve_values()
+        if not any(getattr(incident, field) != value for field, value in values.items()):
+            return Response(
+                {"detail": "Change at least one incident detail before submitting."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if incident.status in {
+            IncidentStatus.SUBMITTED,
+            IncidentStatus.UNDER_REVIEW,
+            IncidentStatus.REJECTED,
+        }:
+            for field, value in values.items():
+                setattr(incident, field, value)
+            incident.status = IncidentStatus.SUBMITTED
+            incident.admin_review_note = ""
+            incident.save()
+            notify_admins_of_submission(incident)
+        else:
+            IncidentRevision.objects.create(
+                incident=incident,
+                submitted_by=request.user,
+                original_title=incident.title,
+                proposed_title=values["title"],
+                original_description=incident.description,
+                proposed_description=values["description"],
+                original_category=incident.category,
+                proposed_category=values["category"],
+                original_location=incident.location,
+                proposed_location=values["location"],
+                original_visibility=incident.visibility,
+                proposed_visibility=values["visibility"],
+            )
+            notify_admins_of_revision(incident)
+
+        incident = self.get_queryset().get(pk=incident.pk)
+        return Response(IncidentStudentDetailSerializer(incident).data)
+
+    def _get_pending_revision(self, incident):
+        return incident.revisions.filter(
+            status=IncidentRevisionStatus.PENDING
+        ).select_related("proposed_category", "proposed_location").first()
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="approve-changes",
+        permission_classes=[IsAdmin],
+    )
+    def approve_changes(self, request, pk=None):
+        incident = self.get_object()
+        revision = self._get_pending_revision(incident)
+        if not revision:
+            return Response(
+                {"detail": "No pending changes were found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        decision = IncidentRevisionDecisionSerializer(data=request.data)
+        decision.is_valid(raise_exception=True)
+        with transaction.atomic():
+            incident.title = revision.proposed_title
+            incident.description = revision.proposed_description
+            incident.category = revision.proposed_category
+            incident.location = revision.proposed_location
+            incident.visibility = revision.proposed_visibility
+            incident.save()
+            revision.status = IncidentRevisionStatus.APPROVED
+            revision.reviewed_by = request.user
+            revision.reviewed_at = timezone.now()
+            revision.review_comment = decision.validated_data.get("comment", "").strip()
+            revision.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+        self._notify_reporter(
+            incident,
+            title="Incident changes approved",
+            message=f"Your changes to {incident.incident_number} are now active.",
+            notification_type=NotificationType.INCIDENT_STATUS_CHANGED,
+        )
+        incident = self.get_queryset().get(pk=incident.pk)
+        return Response(IncidentAdminReviewSerializer(incident).data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="reject-changes",
+        permission_classes=[IsAdmin],
+    )
+    def reject_changes(self, request, pk=None):
+        incident = self.get_object()
+        revision = self._get_pending_revision(incident)
+        if not revision:
+            return Response(
+                {"detail": "No pending changes were found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        decision = IncidentRejectSerializer(data=request.data)
+        decision.is_valid(raise_exception=True)
+        revision.status = IncidentRevisionStatus.REJECTED
+        revision.reviewed_by = request.user
+        revision.reviewed_at = timezone.now()
+        revision.review_comment = decision.validated_data["comment"].strip()
+        revision.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_comment"])
+        self._notify_reporter(
+            incident,
+            title="Incident changes not approved",
+            message=f"The proposed changes to {incident.incident_number} were not approved. Review the reason in the incident.",
+            notification_type=NotificationType.INCIDENT_STATUS_CHANGED,
+        )
+        incident = self.get_queryset().get(pk=incident.pk)
+        return Response(IncidentAdminReviewSerializer(incident).data)
 
     @action(
         detail=True,
@@ -525,7 +690,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
         except InvalidStatusTransitionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        self._add_review_message(incident, request.user, comment)
+        incident.admin_review_note = comment.strip()
+        incident.save(update_fields=["admin_review_note", "updated_at"])
         self._notify_reporter(
             incident,
             title="Incident verified",
@@ -551,38 +717,13 @@ class IncidentViewSet(viewsets.ModelViewSet):
         except InvalidStatusTransitionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        self._add_review_message(incident, request.user, comment, is_internal=False)
+        incident.admin_review_note = comment.strip()
+        incident.save(update_fields=["admin_review_note", "updated_at"])
         self._notify_reporter(
             incident,
             title="Incident rejected",
-            message=f"Your incident {incident.incident_number} was rejected. Please review the message for details.",
+            message=f"Your incident {incident.incident_number} was rejected. Review the reason in the incident details.",
             notification_type=NotificationType.INCIDENT_REJECTED,
-        )
-
-        incident.refresh_from_db()
-        return Response(IncidentAdminReviewSerializer(incident).data)
-
-    @action(detail=True, methods=["post"], url_path="request-info", permission_classes=[IsAdmin])
-    def request_info(self, request, pk=None):
-        incident = self.get_object()
-        if not user_can_admin_review_incident(request.user, incident):
-            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
-
-        serializer = IncidentRequestInfoSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        comment = serializer.validated_data["comment"]
-
-        try:
-            admin_request_more_information(incident)
-        except InvalidStatusTransitionError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        self._add_review_message(incident, request.user, comment, is_internal=False)
-        self._notify_reporter(
-            incident,
-            title="More information requested",
-            message=f"Additional information is required for incident {incident.incident_number}.",
-            notification_type=NotificationType.INCIDENT_STATUS_CHANGED,
         )
 
         incident.refresh_from_db()
@@ -610,14 +751,6 @@ class IncidentViewSet(viewsets.ModelViewSet):
         except (InvalidStatusTransitionError, ValueError) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if data.get("comment"):
-            self._add_review_message(
-                incident,
-                request.user,
-                data["comment"],
-                channel=MessageChannel.STUDENT_OFFICIAL,
-            )
-
         incident.refresh_from_db()
         return Response(IncidentDeanDetailSerializer(incident).data)
 
@@ -636,13 +769,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
         except InvalidStatusTransitionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if comment:
-            self._add_review_message(
-                incident,
-                request.user,
-                comment,
-                channel=MessageChannel.STUDENT_OFFICIAL,
-            )
+        incident.progress_note = comment.strip()
+        incident.save(update_fields=["progress_note", "updated_at"])
 
         incident.refresh_from_db()
         return Response(IncidentOfficialDetailSerializer(incident).data)
@@ -662,12 +790,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
         except InvalidStatusTransitionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        self._add_review_message(
-            incident,
-            request.user,
-            comment,
-            channel=MessageChannel.STUDENT_OFFICIAL,
-        )
+        incident.resolution_statement = comment.strip()
+        incident.save(update_fields=["resolution_statement", "updated_at"])
 
         incident.refresh_from_db()
         return Response(IncidentOfficialDetailSerializer(incident).data)
@@ -687,13 +811,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
         except InvalidStatusTransitionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if comment:
-            self._add_review_message(
-                incident,
-                request.user,
-                comment,
-                channel=MessageChannel.STUDENT_DEAN,
-            )
+        incident.closure_note = comment.strip()
+        incident.save(update_fields=["closure_note", "updated_at"])
 
         incident.refresh_from_db()
         return Response(IncidentDeanDetailSerializer(incident).data)
@@ -713,13 +832,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
         except InvalidStatusTransitionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if comment:
-            self._add_review_message(
-                incident,
-                request.user,
-                comment,
-                channel=MessageChannel.STUDENT_DEAN,
-            )
+        incident.reopen_reason = comment.strip()
+        incident.save(update_fields=["reopen_reason", "updated_at"])
 
         Notification.objects.create(
             user=incident.reporter,

@@ -13,6 +13,15 @@ export const adminIncidentService = {
   listPendingReview: () =>
     apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/pending-review/"),
 
+  listPendingChanges: () =>
+    apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/pending-changes/"),
+
+  listForwarded: () =>
+    apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/forwarded-reports/"),
+
+  listRejected: () =>
+    apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/rejected-reports/"),
+
   getForReview: (id: number) =>
     apiClient.get<AdminIncidentReview>(`/incidents/${id}/`),
 
@@ -24,10 +33,11 @@ export const adminIncidentService = {
   reject: (id: number, comment: string) =>
     apiClient.post<AdminIncidentReview>(`/incidents/${id}/reject/`, { comment }),
 
-  requestInfo: (id: number, comment: string) =>
-    apiClient.post<AdminIncidentReview>(`/incidents/${id}/request-info/`, {
-      comment,
-    }),
+  approveChanges: (id: number, comment = "") =>
+    apiClient.post<AdminIncidentReview>(`/incidents/${id}/approve-changes/`, { comment }),
+
+  rejectChanges: (id: number, comment: string) =>
+    apiClient.post<AdminIncidentReview>(`/incidents/${id}/reject-changes/`, { comment }),
 };
 
 export type { IncidentDetail };

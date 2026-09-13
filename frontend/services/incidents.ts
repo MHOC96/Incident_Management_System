@@ -5,6 +5,7 @@ import type {
   IncidentDetail,
   IncidentImage,
   IncidentVoteResult,
+  IncidentUpdatePayload,
   Location,
   PaginatedResponse,
   PublicIncident,
@@ -43,6 +44,11 @@ export const incidentService = {
   listMine: () => apiClient.get<PaginatedResponse<IncidentDetail>>("/incidents/"),
 
   getById: (id: number) => apiClient.get<StudentIncident>(`/incidents/${id}/`),
+
+  submitChanges: (id: number, payload: IncidentUpdatePayload) =>
+    apiClient.post<StudentIncident>(`/incidents/${id}/submit-changes/`, payload),
+
+  delete: (id: number) => apiClient.delete<Record<string, never>>(`/incidents/${id}/`),
 
   create: (payload: IncidentCreatePayload) =>
     apiClient.post<IncidentDetail>("/incidents/", payload),

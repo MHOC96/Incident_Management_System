@@ -41,7 +41,6 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.incidents",
     "apps.assignments",
-    "apps.communications",
     "apps.notifications",
     "apps.common",
 ]
@@ -140,7 +139,6 @@ REST_FRAMEWORK = {
         "login": "10/minute",
         "registration": "5/hour",
         "incident_create": "20/hour",
-        "communication": "60/hour",
     },
 }
 

@@ -263,27 +263,9 @@ button:disabled { cursor: not-allowed; }
 .detail-body > * { order: 3; }
 .detail-body > :first-child { order: 1; }
 .detail-actions { order: 2; min-width: 0; }
-.detail-body > .incident-messages { order: 4; }
 .detail-body > .incident-timeline { order: 5; }
-.incident-messages, .incident-timeline, .detail-actions { scroll-margin-top: 24px; }
-.incident-messages-list { max-height: 480px; overflow-y: auto; overscroll-behavior: contain; padding-right: 5px; }
-.message-channel-tab { min-height: 40px; padding: 8px 14px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text-secondary); font-size: 13px; font-weight: 500; }
-.message-channel-tab.is-active { border-color: var(--color-primary); color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 8%, white); }
-.chat-thread { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; padding: 4px 2px; }
-.chat-thread-empty { padding: 24px 8px; text-align: center; font-size: 14px; color: var(--color-text-secondary); }
-.chat-message-row { display: flex; width: 100%; }
-.chat-message-row-own { justify-content: flex-end; }
-.chat-message-row-other { justify-content: flex-start; }
-.chat-bubble { max-width: min(78%, 520px); padding: 10px 12px; border-radius: 10px; }
-.chat-bubble-own { background: var(--color-primary); color: white; border-bottom-right-radius: 4px; }
-.chat-bubble-other { background: var(--color-surface-hover); color: var(--color-foreground); border: 1px solid var(--color-border); border-bottom-left-radius: 4px; }
-.chat-bubble-sender { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--color-foreground); }
-.chat-bubble-role { font-weight: 500; color: var(--color-text-muted); }
-.chat-bubble-content { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-.chat-bubble-own .chat-bubble-content { color: white; }
-.chat-bubble-time { display: block; margin-top: 6px; font-size: 11px; opacity: 0.75; }
-.chat-compose { border-top: 1px solid var(--color-border); padding-top: 16px; }
-.incident-messages:focus, .incident-timeline:focus, .detail-actions:focus { outline: 2px solid var(--color-primary); outline-offset: 4px; }
+.incident-timeline, .detail-actions { scroll-margin-top: 24px; }
+.incident-timeline:focus, .detail-actions:focus { outline: 2px solid var(--color-primary); outline-offset: 4px; }
 .public-detail-layout { display: grid; gap: 20px; margin-top: 20px; align-items: start; }
 .public-incident-summary { display: contents; }
 .public-detail-layout > *, .public-incident-summary > * { min-width: 0; }
@@ -358,7 +340,6 @@ button:disabled { cursor: not-allowed; }
   .public-incident-row { padding-inline: 12px; }
   .notification-panel { position: fixed; inset: 120px 16px auto; width: auto; max-height: calc(100dvh - 140px); margin: 0; }
   .detail-jump-links a { flex: 1 1 auto; padding-inline: 12px; }
-  .incident-messages-list { max-height: 360px; }
   .portal-footer { grid-template-columns: 1fr; justify-items: center; text-align: center; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
   .portal-footer-brand, .portal-footer-copy { justify-self: center; text-align: center; }
 }

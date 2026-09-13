@@ -12,7 +12,7 @@ type StatsStripProps = {
 
 export function StatsStrip({ items }: StatsStripProps) {
   return (
-    <div className="stats-strip mb-6 grid grid-cols-2 gap-4 border border-border bg-surface p-4 sm:gap-6 sm:p-6 md:mb-8 md:grid-cols-4">
+    <div className={`stats-strip mb-6 grid grid-cols-2 gap-4 border border-border bg-surface p-4 sm:gap-6 sm:p-6 md:mb-8 ${items.length === 5 ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
       {items.map((item) => {
         const content = (
           <>

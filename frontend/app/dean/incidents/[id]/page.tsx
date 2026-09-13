@@ -8,7 +8,6 @@ import { DeanAssignPanel } from "@/components/dean/DeanAssignPanel";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentDetailHeader } from "@/components/incidents/IncidentDetailHeader";
 import { IncidentEvidence } from "@/components/incidents/IncidentEvidence";
-import { IncidentMessages } from "@/components/incidents/IncidentMessages";
 import {
   IncidentMetaGrid,
   type IncidentMetaItem,
@@ -19,6 +18,7 @@ import {
 } from "@/components/incidents/IncidentPageState";
 import { IncidentSection } from "@/components/incidents/IncidentSection";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
+import { IncidentWorkflowNotes } from "@/components/incidents/IncidentWorkflowNotes";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { formatDate } from "@/lib/format";
 import { getDeanStatusSummary } from "@/lib/incidentCopy";
@@ -67,8 +67,6 @@ function DeanIncidentDetailContent() {
 
   useEffect(() => {
     let ignore = false;
-    setIsLoading(true);
-    setError("");
     void (async () => {
       try {
         const data = await deanIncidentService.getById(Number(params.id));
@@ -147,11 +145,7 @@ function DeanIncidentDetailContent() {
           </IncidentSection>
 
           <IncidentTimeline incident={incident} />
-          <IncidentMessages
-            incidentId={incident.id}
-            incidentStatus={incident.status}
-            hasAssignedOfficial={Boolean(incident.current_assignment)}
-          />
+          <IncidentWorkflowNotes incident={incident} />
         </div>
 
         <aside id="incident-actions" tabIndex={-1} className="detail-actions">

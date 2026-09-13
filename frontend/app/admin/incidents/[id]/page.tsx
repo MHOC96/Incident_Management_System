@@ -8,11 +8,12 @@ import { AdminReviewActions } from "@/components/admin/AdminReviewActions";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentDetailHeader } from "@/components/incidents/IncidentDetailHeader";
 import { IncidentEvidence } from "@/components/incidents/IncidentEvidence";
-import { IncidentMessages } from "@/components/incidents/IncidentMessages";
+import { IncidentRevisionPanel } from "@/components/incidents/IncidentRevisionPanel";
 import { IncidentMetaGrid } from "@/components/incidents/IncidentMetaGrid";
 import { IncidentPageSkeleton, IncidentPageState } from "@/components/incidents/IncidentPageState";
 import { IncidentSection } from "@/components/incidents/IncidentSection";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
+import { IncidentWorkflowNotes } from "@/components/incidents/IncidentWorkflowNotes";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { formatDate } from "@/lib/format";
 import { adminIncidentService } from "@/services/adminIncidents";
@@ -26,8 +27,6 @@ function AdminIncidentReviewContent() {
 
   useEffect(() => {
     let ignore = false;
-    setIsLoading(true);
-    setError("");
     void (async () => {
       try {
         const data = await adminIncidentService.getForReview(Number(params.id));
@@ -61,9 +60,6 @@ function AdminIncidentReviewContent() {
       />
     );
   }
-
-  const isReviewComplete =
-    incident.status !== "SUBMITTED" && incident.status !== "UNDER_REVIEW";
 
   return (
     <section className="py-6 md:py-10">
@@ -103,13 +99,15 @@ function AdminIncidentReviewContent() {
           </IncidentSection>
 
           <IncidentTimeline incident={incident} />
-
-          <IncidentMessages
-            incidentId={incident.id}
-            incidentStatus={incident.status}
-            hasAssignedOfficial={false}
-            readOnly={isReviewComplete}
-          />
+          <IncidentWorkflowNotes incident={incident} />
+          {incident.pending_revision ? (
+            <IncidentRevisionPanel revision={incident.pending_revision} title="Changes awaiting your review" />
+          ) : null}
+          {incident.admin_review_note ? (
+            <IncidentSection title="Admin review note">
+              <p className="whitespace-pre-wrap text-sm text-text-secondary">{incident.admin_review_note}</p>
+            </IncidentSection>
+          ) : null}
         </div>
 
         <aside id="incident-actions" tabIndex={-1} className="detail-actions">

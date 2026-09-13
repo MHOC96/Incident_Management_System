@@ -6,10 +6,10 @@ import { IncidentEvidence } from "@/components/incidents/IncidentEvidence";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
-import { IncidentMessages } from "@/components/incidents/IncidentMessages";
 
 
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
+import { IncidentWorkflowNotes } from "@/components/incidents/IncidentWorkflowNotes";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { OfficialProgressPanel } from "@/components/official/OfficialProgressPanel";
 import { formatDate } from "@/lib/format";
@@ -24,8 +24,6 @@ function OfficialIncidentDetailContent() {
 
   useEffect(() => {
     let ignore = false;
-    setIsLoading(true);
-    setError("");
     void (async () => {
       try {
         const data = await officialIncidentService.getById(Number(params.id));
@@ -96,11 +94,7 @@ function OfficialIncidentDetailContent() {
           </div>
 
           <IncidentTimeline incident={incident} />
-          <IncidentMessages
-            incidentId={incident.id}
-            incidentStatus={incident.status}
-            hasAssignedOfficial={Boolean(incident.current_assignment)}
-          />
+          <IncidentWorkflowNotes incident={incident} />
         </div>
 
         <div id="incident-actions" tabIndex={-1} className="detail-actions">

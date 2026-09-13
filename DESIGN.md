@@ -234,7 +234,7 @@ Use icons for:
 - statuses where useful
 - alerts
 - location
-- communication
+- revision and workflow actions
 
 Do not place an icon beside every piece of text.
 
@@ -739,7 +739,7 @@ Do not expose:
 - Student phone number
 - MC number
 - Private email
-- Internal communications
+- Internal review notes
 - Restricted information
 
 ---
@@ -1836,7 +1836,7 @@ Public incidents must never expose:
 Student full contact number
 MC number
 Email
-Private communications
+Internal review notes
 Restricted incident details
 ```
 

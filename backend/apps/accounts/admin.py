@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from apps.accounts.models import User
 from apps.assignments.models import Assignment, ResponsibleParty
-from apps.communications.models import Message
 from apps.incidents.models import Category, Incident, IncidentImage, Location
 from apps.notifications.models import Notification
 
@@ -59,12 +58,6 @@ class ResponsiblePartyAdmin(admin.ModelAdmin):
 class AssignmentAdmin(admin.ModelAdmin):
     list_display = ["incident", "assigned_official", "is_current", "assigned_at"]
     list_filter = ["is_current"]
-
-
-@admin.register(Message)
-class MessageAdmin(admin.ModelAdmin):
-    list_display = ["incident", "sender", "is_internal", "created_at"]
-    list_filter = ["is_internal"]
 
 
 @admin.register(Notification)

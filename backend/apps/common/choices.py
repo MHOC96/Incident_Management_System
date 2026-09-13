@@ -48,13 +48,6 @@ class IncidentPriority(models.TextChoices):
     CRITICAL = "CRITICAL", "Critical"
 
 
-class MessageChannel(models.TextChoices):
-    STUDENT_ADMIN = "STUDENT_ADMIN", "Student and Admin"
-    STUDENT_DEAN = "STUDENT_DEAN", "Student and Dean"
-    STUDENT_OFFICIAL = "STUDENT_OFFICIAL", "Student and Official"
-    STAFF_INTERNAL = "STAFF_INTERNAL", "Staff internal"
-
-
 class NotificationType(models.TextChoices):
     INCIDENT_SUBMITTED = "INCIDENT_SUBMITTED", "Incident Submitted"
     INCIDENT_VERIFIED = "INCIDENT_VERIFIED", "Incident Verified"
@@ -63,4 +56,3 @@ class NotificationType(models.TextChoices):
     INCIDENT_STATUS_CHANGED = "INCIDENT_STATUS_CHANGED", "Incident Status Changed"
     INCIDENT_RESOLVED = "INCIDENT_RESOLVED", "Incident Resolved"
     INCIDENT_CLOSED = "INCIDENT_CLOSED", "Incident Closed"
-    NEW_MESSAGE = "NEW_MESSAGE", "New Message"

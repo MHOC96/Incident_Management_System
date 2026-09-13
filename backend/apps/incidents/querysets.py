@@ -2,7 +2,7 @@ from django.db.models import BooleanField, Count, Exists, OuterRef, Prefetch, Va
 
 from apps.assignments.models import Assignment
 from apps.common.choices import IncidentStatus, IncidentVisibility, UserRole
-from apps.incidents.models import Incident, IncidentVote
+from apps.incidents.models import Incident, IncidentRevision, IncidentVote
 
 PUBLIC_VISIBLE_STATUSES = (
     IncidentStatus.VERIFIED,
@@ -23,6 +23,18 @@ CURRENT_ASSIGNMENT_PREFETCH = Prefetch(
     to_attr="prefetched_current_assignments",
 )
 
+REVISION_PREFETCH = Prefetch(
+    "revisions",
+    queryset=IncidentRevision.objects.select_related(
+        "submitted_by",
+        "reviewed_by",
+        "original_category",
+        "proposed_category",
+        "original_location",
+        "proposed_location",
+    ),
+)
+
 
 def optimized_incident_queryset():
     return Incident.objects.select_related(
@@ -32,6 +44,7 @@ def optimized_incident_queryset():
     ).prefetch_related(
         "images",
         CURRENT_ASSIGNMENT_PREFETCH,
+        REVISION_PREFETCH,
     )
 
 

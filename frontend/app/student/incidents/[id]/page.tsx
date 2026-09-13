@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentDetailHeader } from "@/components/incidents/IncidentDetailHeader";
 import { IncidentEvidence } from "@/components/incidents/IncidentEvidence";
-import { IncidentMessages } from "@/components/incidents/IncidentMessages";
+import { IncidentRevisionPanel } from "@/components/incidents/IncidentRevisionPanel";
 import {
   IncidentMetaGrid,
   type IncidentMetaItem,
@@ -16,7 +16,9 @@ import {
 } from "@/components/incidents/IncidentPageState";
 import { IncidentSection } from "@/components/incidents/IncidentSection";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
+import { IncidentWorkflowNotes } from "@/components/incidents/IncidentWorkflowNotes";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { StudentIncidentEditPanel } from "@/components/student/StudentIncidentEditPanel";
 import { formatDate, getVisibilityLabel } from "@/lib/format";
 import { incidentService } from "@/services/incidents";
 import type { StudentIncident } from "@/types";
@@ -58,8 +60,6 @@ function StudentIncidentDetailContent() {
 
   useEffect(() => {
     let ignore = false;
-    setIsLoading(true);
-    setError("");
     void (async () => {
       try {
         const data = await incidentService.getById(Number(params.id));
@@ -100,8 +100,6 @@ function StudentIncidentDetailContent() {
     );
   }
 
-  const canMessage =
-    incident.status !== "CLOSED" && incident.status !== "REJECTED";
   const metaItems = buildMetaItems(incident);
 
   return (
@@ -148,14 +146,17 @@ function StudentIncidentDetailContent() {
               <IncidentTimeline incident={incident} />
             </div>
           </div>
-
-          <IncidentMessages
-            incidentId={incident.id}
-            incidentStatus={incident.status}
-            hasAssignedOfficial={Boolean(incident.current_assignment)}
-            readOnly={!canMessage}
-            hideHeader
-          />
+          {incident.admin_review_note ? (
+            <IncidentSection title={incident.status === "REJECTED" ? "Why this report was rejected" : "Admin review note"}>
+              <p className="whitespace-pre-wrap text-sm text-text-secondary">{incident.admin_review_note}</p>
+            </IncidentSection>
+          ) : null}
+          <IncidentWorkflowNotes incident={incident} />
+          {incident.pending_revision ? <IncidentRevisionPanel revision={incident.pending_revision} /> : null}
+          {!incident.pending_revision && incident.revision_history[0] && incident.revision_history[0].status !== "PENDING" ? (
+            <IncidentRevisionPanel revision={incident.revision_history[0]} title="Latest change review" />
+          ) : null}
+          <StudentIncidentEditPanel incident={incident} onUpdated={setIncident} />
         </div>
       </section>
     </PageContainer>

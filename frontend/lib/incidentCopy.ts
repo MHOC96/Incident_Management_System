@@ -9,7 +9,7 @@ export function getStudentStatusSummary(status: IncidentStatus): string {
     case "VERIFIED":
       return "This report has been accepted and will be forwarded for action.";
     case "REJECTED":
-      return "This report was not accepted. Check the communication below for the reason.";
+      return "This report was not accepted. Review the admin reason below, update the details, and resubmit it.";
     case "FORWARDED_TO_DEAN":
       return "This report has been sent to the Dean for assignment.";
     case "ASSIGNED":

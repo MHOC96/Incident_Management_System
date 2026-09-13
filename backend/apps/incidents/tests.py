@@ -8,7 +8,14 @@ from apps.common.authorization import (
     user_can_start_progress_incident,
 )
 from apps.common.choices import IncidentStatus, IncidentVisibility, UserRole
-from apps.incidents.models import Category, Incident, IncidentVote, Location
+from apps.incidents.models import (
+    Category,
+    Incident,
+    IncidentRevision,
+    IncidentRevisionStatus,
+    IncidentVote,
+    Location,
+)
 from apps.notifications.models import Notification
 
 User = get_user_model()
@@ -149,13 +156,13 @@ class OfficialFlowTests(TestCase):
         self.assertEqual(data["in_progress"], 1)
         self.assertEqual(data["total_assigned"], 1)
 
-    def test_official_can_message_on_assigned_incident(self):
+    def test_incident_chat_endpoint_is_removed(self):
         response = self.client.post(
             f"/api/incidents/{self.incident.id}/messages/",
             {"content": "Inspection scheduled for tomorrow."},
             format="json",
         )
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 404)
 
     def test_student_cannot_resolve_incident(self):
         self.client.force_authenticate(user=self.student)
@@ -302,15 +309,14 @@ class IncidentSecurityAndPublicTests(TestCase):
         response = self.client.get(f"/api/incidents/{self.public_verified.id}/messages/")
         self.assertEqual(response.status_code, 404)
 
-    def test_student_cannot_create_internal_message(self):
+    def test_student_cannot_create_incident_messages(self):
         self.client.force_authenticate(user=self.student)
         response = self.client.post(
             f"/api/incidents/{self.public_verified.id}/messages/",
             {"content": "Please keep this private from staff.", "is_internal": True},
             format="json",
         )
-        self.assertEqual(response.status_code, 201)
-        self.assertFalse(response.json()["is_internal"])
+        self.assertEqual(response.status_code, 404)
 
 
 class DeanOversightTests(TestCase):
@@ -504,3 +510,180 @@ class IncidentVoteTests(TestCase):
             [item["id"] for item in response.json()["results"]],
             [self.completed.id],
         )
+
+
+class IncidentRevisionWorkflowTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.student = User.objects.create_user(
+            email="revision-student@usj.lk",
+            password="testpass123",
+            name="Revision Student",
+            role=UserRole.STUDENT,
+        )
+        self.other_student = User.objects.create_user(
+            email="other-revision-student@usj.lk",
+            password="testpass123",
+            name="Other Revision Student",
+            role=UserRole.STUDENT,
+        )
+        self.admin = User.objects.create_user(
+            email="revision-admin@usj.lk",
+            password="testpass123",
+            name="Revision Admin",
+            role=UserRole.ADMIN,
+        )
+        self.category = Category.objects.create(name="Revision Maintenance", slug="revision-maintenance")
+        self.new_category = Category.objects.create(name="Revision Safety", slug="revision-safety")
+        self.location = Location.objects.create(name="Revision Block A")
+        self.new_location = Location.objects.create(name="Revision Block B")
+        self.incident = Incident.objects.create(
+            incident_number="INC-2026-00910",
+            title="Original approved title",
+            description="Original approved description",
+            category=self.category,
+            location=self.location,
+            reporter=self.student,
+            status=IncidentStatus.IN_PROGRESS,
+            visibility=IncidentVisibility.PRIVATE,
+        )
+
+    def change_payload(self):
+        return {
+            "title": "Updated incident title",
+            "description": "Updated description with clearer incident details.",
+            "category": self.new_category.id,
+            "location": self.new_location.id,
+            "visibility": IncidentVisibility.PUBLIC,
+        }
+
+    def submit_revision(self):
+        self.client.force_authenticate(user=self.student)
+        return self.client.post(
+            f"/api/incidents/{self.incident.id}/submit-changes/",
+            self.change_payload(),
+            format="json",
+        )
+
+    def test_approved_incident_changes_wait_for_admin_review(self):
+        response = self.submit_revision()
+        self.assertEqual(response.status_code, 200)
+        self.incident.refresh_from_db()
+        self.assertEqual(self.incident.title, "Original approved title")
+        self.assertEqual(self.incident.status, IncidentStatus.IN_PROGRESS)
+        revision = IncidentRevision.objects.get(incident=self.incident)
+        self.assertEqual(revision.status, IncidentRevisionStatus.PENDING)
+        changed_fields = {item["field"] for item in response.json()["pending_revision"]["changes"]}
+        self.assertEqual(changed_fields, {"title", "description", "category", "location", "visibility"})
+
+    def test_admin_approval_applies_changes_without_resetting_workflow_status(self):
+        self.submit_revision()
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            f"/api/incidents/{self.incident.id}/approve-changes/", {}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.incident.refresh_from_db()
+        self.assertEqual(self.incident.title, "Updated incident title")
+        self.assertEqual(self.incident.category, self.new_category)
+        self.assertEqual(self.incident.status, IncidentStatus.IN_PROGRESS)
+        self.assertEqual(
+            IncidentRevision.objects.get(incident=self.incident).status,
+            IncidentRevisionStatus.APPROVED,
+        )
+
+    def test_admin_rejection_keeps_live_values_and_records_reason(self):
+        self.submit_revision()
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            f"/api/incidents/{self.incident.id}/reject-changes/",
+            {"comment": "The proposed location does not match the evidence."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.incident.refresh_from_db()
+        self.assertEqual(self.incident.title, "Original approved title")
+        revision = IncidentRevision.objects.get(incident=self.incident)
+        self.assertEqual(revision.status, IncidentRevisionStatus.REJECTED)
+        self.assertIn("location", revision.review_comment)
+
+    def test_rejected_incident_edit_is_resubmitted_for_initial_review(self):
+        self.incident.status = IncidentStatus.REJECTED
+        self.incident.admin_review_note = "The description was incomplete."
+        self.incident.save(update_fields=["status", "admin_review_note", "updated_at"])
+        response = self.submit_revision()
+        self.assertEqual(response.status_code, 200)
+        self.incident.refresh_from_db()
+        self.assertEqual(self.incident.status, IncidentStatus.SUBMITTED)
+        self.assertEqual(self.incident.title, "Updated incident title")
+        self.assertEqual(self.incident.admin_review_note, "")
+        self.assertFalse(IncidentRevision.objects.filter(incident=self.incident).exists())
+
+    def test_other_student_cannot_submit_changes(self):
+        self.client.force_authenticate(user=self.other_student)
+        response = self.client.post(
+            f"/api/incidents/{self.incident.id}/submit-changes/",
+            self.change_payload(),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_admin_can_list_pending_changes_forwarded_progress_and_rejections(self):
+        self.submit_revision()
+        rejected = Incident.objects.create(
+            incident_number="INC-2026-00911",
+            title="Rejected report",
+            description="Rejected report description",
+            category=self.category,
+            location=self.location,
+            reporter=self.student,
+            status=IncidentStatus.REJECTED,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+        pending_response = self.client.get("/api/incidents/pending-changes/")
+        forwarded_response = self.client.get("/api/incidents/forwarded-reports/")
+        rejected_response = self.client.get("/api/incidents/rejected-reports/")
+
+        self.assertEqual(pending_response.status_code, 200)
+        self.assertEqual(forwarded_response.status_code, 200)
+        self.assertEqual(rejected_response.status_code, 200)
+        self.assertIn(self.incident.id, {item["id"] for item in pending_response.json()["results"]})
+        self.assertIn(self.incident.id, {item["id"] for item in forwarded_response.json()["results"]})
+        self.assertIn(rejected.id, {item["id"] for item in rejected_response.json()["results"]})
+
+    def test_student_can_delete_own_unapproved_report(self):
+        report = Incident.objects.create(
+            incident_number="INC-2026-00912",
+            title="Report to delete",
+            description="This unapproved report is no longer needed.",
+            category=self.category,
+            location=self.location,
+            reporter=self.student,
+            status=IncidentStatus.SUBMITTED,
+        )
+        self.client.force_authenticate(user=self.student)
+        response = self.client.delete(f"/api/incidents/{report.id}/")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Incident.objects.filter(id=report.id).exists())
+
+    def test_student_cannot_delete_another_students_report(self):
+        report = Incident.objects.create(
+            incident_number="INC-2026-00913",
+            title="Another student's report",
+            description="Only its reporter may delete this report.",
+            category=self.category,
+            location=self.location,
+            reporter=self.other_student,
+            status=IncidentStatus.SUBMITTED,
+        )
+        self.client.force_authenticate(user=self.student)
+        response = self.client.delete(f"/api/incidents/{report.id}/")
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Incident.objects.filter(id=report.id).exists())
+
+    def test_student_cannot_delete_approved_operational_report(self):
+        self.client.force_authenticate(user=self.student)
+        response = self.client.delete(f"/api/incidents/{self.incident.id}/")
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Incident.objects.filter(id=self.incident.id).exists())
