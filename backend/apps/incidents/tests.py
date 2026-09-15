@@ -573,8 +573,13 @@ class IncidentRevisionWorkflowTests(TestCase):
         self.assertEqual(self.incident.status, IncidentStatus.IN_PROGRESS)
         revision = IncidentRevision.objects.get(incident=self.incident)
         self.assertEqual(revision.status, IncidentRevisionStatus.PENDING)
-        changed_fields = {item["field"] for item in response.json()["pending_revision"]["changes"]}
-        self.assertEqual(changed_fields, {"title", "description", "category", "location", "visibility"})
+        body = response.json()
+        self.assertTrue(body["has_pending_changes"])
+        self.assertNotIn("pending_revision", body)
+        detail = self.client.get(f"/api/incidents/{self.incident.id}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertTrue(detail.json()["has_pending_changes"])
+        self.assertEqual(detail.json()["revision_history"], [])
 
     def test_admin_approval_applies_changes_without_resetting_workflow_status(self):
         self.submit_revision()

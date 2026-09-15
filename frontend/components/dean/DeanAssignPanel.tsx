@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Select } from "@/components/ui/Select";
@@ -26,8 +26,14 @@ type DeanAssignPanelProps = {
 const priorityOptions: IncidentPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
+  const assignRef = useRef<HTMLDialogElement>(null);
+  const priorityRef = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef<HTMLDialogElement>(null);
+  const reopenRef = useRef<HTMLDialogElement>(null);
+
   const [officials, setOfficials] = useState<OfficialAccount[]>([]);
   const [parties, setParties] = useState<ResponsibleParty[]>([]);
+  const [optionsLoaded, setOptionsLoaded] = useState(false);
   const [assignedOfficial, setAssignedOfficial] = useState("");
   const [responsibleParty, setResponsibleParty] = useState("");
   const [priority, setPriority] = useState(incident.priority ?? "MEDIUM");
@@ -44,20 +50,41 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
     setPriority(incident.priority ?? "MEDIUM");
   }, [incident.priority]);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [officialData, partyData] = await Promise.all([
-          officialService.listActive(),
-          responsiblePartyService.list(),
-        ]);
-        setOfficials(officialData);
-        setParties(partyData);
-      } catch {
-        setError("We couldn't load assignment options.");
-      }
-    })();
-  }, []);
+  async function ensureAssignmentOptions() {
+    if (optionsLoaded) {
+      return;
+    }
+    const [officialData, partyData] = await Promise.all([
+      officialService.listActive(),
+      responsiblePartyService.list(),
+    ]);
+    setOfficials(officialData);
+    setParties(partyData);
+    setOptionsLoaded(true);
+  }
+
+  function openAssignDialog() {
+    setError("");
+    void ensureAssignmentOptions().catch(() => {
+      setError("We couldn't load assignment options.");
+    });
+    assignRef.current?.showModal();
+  }
+
+  function openPriorityDialog() {
+    setError("");
+    setPriority(incident.priority ?? "MEDIUM");
+    priorityRef.current?.showModal();
+  }
+
+  const canAssign =
+    incident.status === "FORWARDED_TO_DEAN" ||
+    incident.status === "ASSIGNED" ||
+    incident.status === "IN_PROGRESS";
+
+  const canClose = incident.status === "RESOLVED";
+  const canReopen = incident.status === "RESOLVED";
+  const canSetPriority = incident.status !== "CLOSED" && incident.status !== "REJECTED";
 
   async function handleAssign() {
     setError("");
@@ -74,6 +101,8 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
         priority,
       });
       onUpdated(updated);
+      assignRef.current?.close();
+      setComment("");
       showToast("Incident assigned successfully.");
     } catch (assignError) {
       setError(formatApiError(assignError, "We couldn't assign this incident."));
@@ -88,6 +117,7 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
     try {
       const updated = await deanIncidentService.setPriority(incident.id, priority);
       onUpdated(updated);
+      priorityRef.current?.close();
       showToast("Priority updated.");
     } catch (priorityError) {
       setError(formatApiError(priorityError, "We couldn't update priority."));
@@ -102,6 +132,8 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
     try {
       const updated = await deanIncidentService.close(incident.id, closeComment);
       onUpdated(updated);
+      closeRef.current?.close();
+      setCloseComment("");
       showToast("Incident closed.");
     } catch (closeError) {
       setError(formatApiError(closeError, "We couldn't close this incident."));
@@ -116,6 +148,8 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
     try {
       const updated = await deanIncidentService.reopen(incident.id, reopenComment);
       onUpdated(updated);
+      reopenRef.current?.close();
+      setReopenComment("");
       showToast("Incident returned for additional work.");
     } catch (reopenError) {
       setError(formatApiError(reopenError, "We couldn't reopen this incident."));
@@ -124,53 +158,65 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
     }
   }
 
-  const canAssign =
-    incident.status === "FORWARDED_TO_DEAN" ||
-    incident.status === "ASSIGNED" ||
-    incident.status === "IN_PROGRESS";
-
-  const canClose = incident.status === "RESOLVED";
-  const canReopen = incident.status === "RESOLVED";
-
   return (
     <>
-      <div className="space-y-6">
-        <div className="rounded-lg border border-border bg-surface p-4 md:p-6">
-          <h2 className="text-[18px] font-semibold mb-4">Priority</h2>
-          <FormField label="Official priority" htmlFor="priority">
-            <Select
-              id="priority"
-              value={priority}
-              onChange={(event) => setPriority(event.target.value as IncidentPriority)}
-            >
-              {priorityOptions.map((option) => (
-                <option key={option} value={option}>
-                  {getPriorityLabel(option)}
-                </option>
-              ))}
-            </Select>
-          </FormField>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        {canSetPriority ? (
+          <Button type="button" variant="ghost" className="px-3" onClick={openPriorityDialog}>
+            Priority
+          </Button>
+        ) : null}
+        {canAssign ? (
+          <Button type="button" className="px-4" onClick={openAssignDialog}>
+            Assign official
+          </Button>
+        ) : null}
+        {canReopen ? (
           <Button
             type="button"
-            variant="secondary"
-            className="w-full"
-            isLoading={isSubmitting === "priority"}
-            loadingText="Updating priority..."
-            onClick={handlePriorityUpdate}
+            variant="ghost"
+            className="px-3"
+            onClick={() => {
+              setError("");
+              reopenRef.current?.showModal();
+            }}
           >
-            Update priority
+            Return for work
           </Button>
-        </div>
+        ) : null}
+        {canClose ? (
+          <Button
+            type="button"
+            className="px-4"
+            onClick={() => {
+              setError("");
+              closeRef.current?.showModal();
+            }}
+          >
+            Close incident
+          </Button>
+        ) : null}
+      </div>
 
-        {canAssign ? (
-          <div className="rounded-lg border border-border bg-surface p-4 md:p-6">
-            <h2 className="text-[18px] font-semibold mb-4">Assignment</h2>
-            <FormField label="Assigned official" htmlFor="official" required>
+      <dialog
+        ref={assignRef}
+        aria-label="Assign incident"
+        className="workspace-dialog workspace-dialog-wide"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) assignRef.current?.close();
+        }}
+      >
+        <div className="workspace-dialog-panel">
+          <div className="workspace-dialog-body">
+          <h2 className="text-lg font-semibold">Assign incident</h2>
+          <div className="mt-4 space-y-4">
+            <FormField label="Assigned official" htmlFor="dean-official" required>
               <Select
-                id="official"
+                id="dean-official"
                 value={assignedOfficial}
                 onChange={(event) => setAssignedOfficial(event.target.value)}
                 required
+                searchable
                 searchPlaceholder="Search officials..."
               >
                 <option value="">Select official</option>
@@ -181,11 +227,12 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Responsible party" htmlFor="party">
+            <FormField label="Responsible party" htmlFor="dean-party">
               <Select
-                id="party"
+                id="dean-party"
                 value={responsibleParty}
                 onChange={(event) => setResponsibleParty(event.target.value)}
+                searchable
                 searchPlaceholder="Search responsible parties..."
               >
                 <option value="">Optional</option>
@@ -196,82 +243,199 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Assignment comment" htmlFor="comment">
+            <FormField label="Official priority" htmlFor="dean-assign-priority">
+              <Select
+                id="dean-assign-priority"
+                value={priority}
+                onChange={(event) => setPriority(event.target.value as IncidentPriority)}
+              >
+                {priorityOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {getPriorityLabel(option)}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Assignment comment" htmlFor="dean-comment">
               <Textarea
-                id="comment"
+                id="dean-comment"
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 rows={3}
                 placeholder={placeholders.assignmentComment}
               />
             </FormField>
+          </div>
+          {error ? (
+            <p className="mt-3 text-sm text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          </div>
+          <div className="workspace-dialog-footer">
+            <Button type="button" variant="ghost" onClick={() => assignRef.current?.close()}>
+              Cancel
+            </Button>
             <Button
               type="button"
-              className="w-full"
-              isLoading={isSubmitting === "assign"}
-              loadingText="Assigning incident..."
               disabled={!assignedOfficial}
-              onClick={handleAssign}
+              isLoading={isSubmitting === "assign"}
+              loadingText="Assigning..."
+              onClick={() => void handleAssign()}
             >
-              Assign incident
+              Confirm assignment
             </Button>
           </div>
-        ) : null}
+        </div>
+      </dialog>
 
-        {canClose ? (
-          <div className="rounded-lg border border-border bg-surface p-4 md:p-6">
-            <h2 className="text-[18px] font-semibold mb-4">Close incident</h2>
-            <p className="mb-4 text-sm text-text-secondary">
-              Review the official resolution before closing this incident.
+      <dialog
+        ref={priorityRef}
+        aria-label="Update priority"
+        className="workspace-dialog"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) priorityRef.current?.close();
+        }}
+      >
+        <div className="workspace-dialog-panel">
+          <div className="workspace-dialog-body">
+            <h2 className="text-lg font-semibold">Update priority</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Choose the official priority for this incident.
             </p>
-            <FormField label="Closure note (optional)" htmlFor="close-comment">
+            <fieldset className="mt-3 border-0 p-0">
+              <legend className="text-sm font-medium text-foreground">Official priority</legend>
+              <div className="workspace-priority-options">
+                {priorityOptions.map((option) => (
+                  <label key={option} className="workspace-priority-option">
+                    <input
+                      type="radio"
+                      name="dean-priority"
+                      value={option}
+                      checked={priority === option}
+                      onChange={() => setPriority(option)}
+                    />
+                    <span className="font-medium">{getPriorityLabel(option)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            {error ? (
+              <p className="mt-3 text-sm text-danger" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </div>
+          <div className="workspace-dialog-footer">
+            <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={() => priorityRef.current?.close()}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              isLoading={isSubmitting === "priority"}
+              loadingText="Updating..."
+              onClick={() => void handlePriorityUpdate()}
+            >
+              Save priority
+            </Button>
+          </div>
+        </div>
+      </dialog>
+
+      <dialog
+        ref={closeRef}
+        aria-label="Close incident"
+        className="workspace-dialog"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) closeRef.current?.close();
+        }}
+      >
+        <div className="workspace-dialog-panel">
+          <div className="workspace-dialog-body">
+          <h2 className="text-lg font-semibold">Close incident</h2>
+          <p className="mt-1 text-sm text-text-secondary">
+            Review the official resolution before closing this incident.
+          </p>
+          <div className="mt-4">
+            <FormField label="Closure note (optional)" htmlFor="dean-close-comment">
               <Textarea
-                id="close-comment"
+                id="dean-close-comment"
                 value={closeComment}
                 onChange={(event) => setCloseComment(event.target.value)}
                 rows={3}
                 placeholder={placeholders.closureNote}
               />
             </FormField>
+          </div>
+          {error ? (
+            <p className="mt-3 text-sm text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          </div>
+          <div className="workspace-dialog-footer">
+            <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={() => closeRef.current?.close()}>
+              Cancel
+            </Button>
             <Button
               type="button"
-              className="w-full"
+              className="w-full sm:w-auto"
               isLoading={isSubmitting === "close"}
-              loadingText="Closing incident..."
-              onClick={handleClose}
+              loadingText="Closing..."
+              onClick={() => void handleClose()}
             >
               Close incident
             </Button>
           </div>
-        ) : null}
+        </div>
+      </dialog>
 
-        {canReopen ? (
-          <div className="rounded-lg border border-border bg-surface p-4 md:p-6">
-            <h2 className="text-[18px] font-semibold mb-4">Return for additional work</h2>
-            <FormField label="Reason (optional)" htmlFor="reopen-comment">
+      <dialog
+        ref={reopenRef}
+        aria-label="Return incident for additional work"
+        className="workspace-dialog"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) reopenRef.current?.close();
+        }}
+      >
+        <div className="workspace-dialog-panel">
+          <div className="workspace-dialog-body">
+          <h2 className="text-lg font-semibold">Return for additional work</h2>
+          <div className="mt-4">
+            <FormField label="Reason (optional)" htmlFor="dean-reopen-comment">
               <Textarea
-                id="reopen-comment"
+                id="dean-reopen-comment"
                 value={reopenComment}
                 onChange={(event) => setReopenComment(event.target.value)}
                 rows={3}
                 placeholder={placeholders.reopenReason}
               />
             </FormField>
+          </div>
+          {error ? (
+            <p className="mt-3 text-sm text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          </div>
+          <div className="workspace-dialog-footer">
+            <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={() => reopenRef.current?.close()}>
+              Cancel
+            </Button>
             <Button
               type="button"
               variant="secondary"
-              className="w-full"
+              className="w-full sm:w-auto"
               isLoading={isSubmitting === "reopen"}
-              loadingText="Returning incident..."
-              onClick={handleReopen}
+              loadingText="Submitting..."
+              onClick={() => void handleReopen()}
             >
               Return to in progress
             </Button>
           </div>
-        ) : null}
-
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
-      </div>
+        </div>
+      </dialog>
 
       {message ? <Toast message={message} onDismiss={dismissToast} /> : null}
     </>

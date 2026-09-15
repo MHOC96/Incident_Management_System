@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.accounts.student_email import student_email_from_mc
 from apps.common.choices import AccountStatus, IncidentStatus, UserRole
 from apps.common.authorization import user_can_admin_review_incident, user_can_close_incident
 from apps.incidents.models import Category, Incident, Location
@@ -10,6 +11,12 @@ from apps.incidents.services import admin_verify_and_forward
 from apps.notifications.models import Notification
 
 User = get_user_model()
+
+
+class StudentEmailTests(TestCase):
+    def test_student_email_from_mc(self):
+        self.assertEqual(student_email_from_mc("112257"), "112257@mgt.sjp.ac.lk")
+        self.assertEqual(student_email_from_mc(" mc 99 "), "mc99@mgt.sjp.ac.lk")
 
 
 class PermissionFoundationTests(TestCase):
@@ -163,7 +170,7 @@ class AuthEndpointTests(TestCase):
 
     def test_student_logs_in_with_mc_and_cpm(self):
         User.objects.create_user(
-            email="112257@students.sjp.ac.lk",
+            email="112257@mgt.sjp.ac.lk",
             password="25660",
             name="Student 112257",
             role=UserRole.STUDENT,
@@ -179,7 +186,7 @@ class AuthEndpointTests(TestCase):
 
     def test_student_cannot_log_in_with_email(self):
         User.objects.create_user(
-            email="112257@students.sjp.ac.lk",
+            email="112257@mgt.sjp.ac.lk",
             password="25660",
             name="Student 112257",
             role=UserRole.STUDENT,
@@ -187,14 +194,14 @@ class AuthEndpointTests(TestCase):
         )
         response = self.client.post(
             "/api/auth/login/",
-            {"email": "112257@students.sjp.ac.lk", "password": "25660"},
+            {"email": "112257@mgt.sjp.ac.lk", "password": "25660"},
             format="json",
         )
         self.assertEqual(response.status_code, 401)
 
     def test_student_can_change_password(self):
         student = User.objects.create_user(
-            email="112208@students.sjp.ac.lk",
+            email="112208@mgt.sjp.ac.lk",
             password="25661",
             name="Student 112208",
             role=UserRole.STUDENT,

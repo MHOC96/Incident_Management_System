@@ -1,4 +1,4 @@
-import { formatDate } from "@/lib/format";
+import { formatDateTimeColombo } from "@/lib/format";
 import type { Assignment, IncidentStatus, PublicIncident } from "@/types";
 
 export type TimelineEvent = {
@@ -10,6 +10,7 @@ export type TimelineEvent = {
 
 type IncidentTimelineProps = {
   incident: PublicIncident & { current_assignment?: Assignment | null };
+  compact?: boolean;
 };
 
 const activeStatuses: IncidentStatus[] = [
@@ -87,12 +88,18 @@ export function buildTimelineEvents(
   );
 }
 
-export function IncidentTimeline({ incident }: IncidentTimelineProps) {
+export function IncidentTimeline({ incident, compact = false }: IncidentTimelineProps) {
   const events = buildTimelineEvents(incident);
 
   return (
-    <div id="incident-timeline" tabIndex={-1} className="incident-timeline rounded-lg border border-border bg-surface p-4 md:p-6">
-      <h2 className="text-[18px] font-semibold mb-4">Incident timeline</h2>
+    <div
+      id="incident-timeline"
+      tabIndex={-1}
+      className={`incident-timeline ${compact ? "student-incident-timeline" : "rounded-lg border border-border bg-surface p-4 md:p-6"}`}
+    >
+      <h2 className={`font-semibold ${compact ? "mb-3 text-base" : "mb-4 text-[18px]"}`}>
+        Progress
+      </h2>
       {events.length === 0 ? (
         <p className="text-sm text-text-secondary">No progress recorded yet.</p>
       ) : (
@@ -114,7 +121,7 @@ export function IncidentTimeline({ incident }: IncidentTimelineProps) {
                 {event.detail ? (
                   <p className="break-words text-sm text-text-secondary">{event.detail}</p>
                 ) : null}
-                <p className="text-xs text-text-muted">{formatDate(event.at)}</p>
+                <p className="text-xs text-text-muted">{formatDateTimeColombo(event.at)}</p>
               </div>
             </li>
           ))}

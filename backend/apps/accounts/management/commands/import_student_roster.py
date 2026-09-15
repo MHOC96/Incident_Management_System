@@ -6,11 +6,11 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.accounts.models import User
+from apps.accounts.student_email import student_email_from_mc
 from apps.common.choices import AccountStatus, UserRole
-from apps.common.validators import normalize_mc_number, validate_mc_number
+from apps.common.validators import validate_mc_number
 
 DEFAULT_ROSTER = Path(settings.BASE_DIR) / "data" / "student_roster.csv"
-STUDENT_EMAIL_DOMAIN = "students.sjp.ac.lk"
 
 
 class Command(BaseCommand):
@@ -56,9 +56,16 @@ class Command(BaseCommand):
                     except ValueError as exc:
                         raise CommandError(f"Invalid MC number '{raw_mc}': {exc}") from exc
 
-                    email = f"{normalize_mc_number(mc_number).lower()}@{STUDENT_EMAIL_DOMAIN}"
+                    email = student_email_from_mc(mc_number)
                     existing = User.objects.filter(mc_number=mc_number, role=UserRole.STUDENT).first()
                     if existing:
+                        if existing.email.lower() != email.lower():
+                            if User.objects.filter(email__iexact=email).exclude(pk=existing.pk).exists():
+                                raise CommandError(
+                                    f"Cannot update student {mc_number}: email {email} already exists."
+                                )
+                            existing.email = email
+                            existing.save(update_fields=["email", "updated_at"])
                         skipped += 1
                         continue
                     if User.objects.filter(email__iexact=email).exists():

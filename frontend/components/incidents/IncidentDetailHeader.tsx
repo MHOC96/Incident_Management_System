@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { IncidentPriorityBadge } from "@/components/incidents/IncidentPriorityBadge";
 import { IncidentStatusBadge } from "@/components/incidents/IncidentStatusBadge";
+import { formatLocationPlace } from "@/lib/format";
 import type { Category, IncidentPriority, IncidentStatus, Location } from "@/types";
 
 type IncidentDetailHeaderProps = {
@@ -19,11 +20,9 @@ type IncidentDetailHeaderProps = {
   showIncidentNumber?: boolean;
   voteCount?: number;
   titleActions?: ReactNode;
+  /** When set, replaces the default location/category block (compact student layout). */
+  metaLine?: ReactNode;
 };
-
-function getHeaderLocation(location: Location): string {
-  return location.name || location.building || location.faculty;
-}
 
 export function IncidentDetailHeader({
   backHref,
@@ -40,10 +39,11 @@ export function IncidentDetailHeader({
   showIncidentNumber = true,
   voteCount,
   titleActions,
+  metaLine,
 }: IncidentDetailHeaderProps) {
   return (
     <header
-      className={`pb-5 md:pb-6 ${showBorderBottom ? "border-b border-border" : ""}`}
+      className={`pb-4 md:pb-5 ${showBorderBottom ? "border-b border-border" : ""}`}
     >
       <Link
         href={backHref}
@@ -76,16 +76,20 @@ export function IncidentDetailHeader({
         {titleActions ? <div className="shrink-0">{titleActions}</div> : null}
       </div>
 
-      <p className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-        <span>
-          <span className="text-text-muted">Location </span>
-          <span className="font-medium text-foreground">{getHeaderLocation(location)}</span>
-        </span>
-        <span>
-          <span className="text-text-muted">Category </span>
-          <span className="font-medium text-foreground">{category.name}</span>
-        </span>
-      </p>
+      {metaLine ? (
+        <p className="mt-2 text-sm text-text-secondary">{metaLine}</p>
+      ) : (
+        <p className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+          <span>
+            <span className="text-text-muted">Location </span>
+            <span className="font-medium text-foreground">{formatLocationPlace(location)}</span>
+          </span>
+          <span>
+            <span className="text-text-muted">Category </span>
+            <span className="font-medium text-foreground">{category.name}</span>
+          </span>
+        </p>
+      )}
 
       {summary ? (
         <p className="mt-4 max-w-3xl rounded-md border border-border bg-background px-4 py-3 text-sm text-text-secondary">

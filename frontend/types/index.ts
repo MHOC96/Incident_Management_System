@@ -213,7 +213,7 @@ export type OfficialAccount = {
 export type OfficialCreatePayload = {
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
   position: OfficialPosition;
 };
 
@@ -256,7 +256,7 @@ export type Notification = {
 
 export type StudentIncident = IncidentDetail & {
   current_assignment: Assignment | null;
-  pending_revision: IncidentRevision | null;
+  has_pending_changes: boolean;
   revision_history: IncidentRevision[];
 };
 

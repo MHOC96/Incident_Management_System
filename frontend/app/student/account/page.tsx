@@ -26,6 +26,12 @@ function StudentAccountContent() {
                   <dt className="text-text-muted">Username (MC number)</dt>
                   <dd className="mt-0.5 font-medium text-foreground">{user?.mc_number ?? "—"}</dd>
                 </div>
+                <div>
+                  <dt className="text-text-muted">University email</dt>
+                  <dd className="mt-0.5 break-all font-medium text-foreground">
+                    {user?.email ?? "—"}
+                  </dd>
+                </div>
               </dl>
             </div>
 

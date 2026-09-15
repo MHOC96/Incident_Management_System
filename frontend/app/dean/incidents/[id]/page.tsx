@@ -1,63 +1,29 @@
 "use client";
-import { DetailJumpLinks } from "@/components/incidents/DetailJumpLinks";
 
-
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { DeanAssignPanel } from "@/components/dean/DeanAssignPanel";
 import { RequireAuth } from "@/components/auth/RequireAuth";
-import { IncidentDetailHeader } from "@/components/incidents/IncidentDetailHeader";
 import { IncidentEvidence } from "@/components/incidents/IncidentEvidence";
-import {
-  IncidentMetaGrid,
-  type IncidentMetaItem,
-} from "@/components/incidents/IncidentMetaGrid";
+import { IncidentMetaGrid } from "@/components/incidents/IncidentMetaGrid";
 import {
   IncidentPageSkeleton,
   IncidentPageState,
 } from "@/components/incidents/IncidentPageState";
-import { IncidentSection } from "@/components/incidents/IncidentSection";
+import { IncidentPriorityBadge } from "@/components/incidents/IncidentPriorityBadge";
+import { IncidentStatusBadge } from "@/components/incidents/IncidentStatusBadge";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
 import { IncidentWorkflowNotes } from "@/components/incidents/IncidentWorkflowNotes";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { formatDate } from "@/lib/format";
+import {
+  formatDate,
+  formatLocationPlace,
+  getVisibilityLabel,
+} from "@/lib/format";
 import { getDeanStatusSummary } from "@/lib/incidentCopy";
 import { deanIncidentService } from "@/services/deanIncidents";
 import type { DeanIncident } from "@/types";
-
-function buildMetaItems(incident: DeanIncident): IncidentMetaItem[] {
-  const items: IncidentMetaItem[] = [
-    { label: "Reporter", value: incident.reporter.name },
-    { label: "Email", value: incident.reporter.email },
-    { label: "Phone", value: incident.reporter.phone || "Not provided" },
-    { label: "Submitted", value: formatDate(incident.created_at) },
-  ];
-
-  if (incident.current_assignment) {
-    items.push({
-      label: "Responsible official",
-      value: incident.current_assignment.assigned_official_name,
-    });
-    items.push({
-      label: "Assigned",
-      value: formatDate(incident.current_assignment.assigned_at),
-    });
-  }
-
-  if (incident.verified_at) {
-    items.push({ label: "Verified", value: formatDate(incident.verified_at) });
-  }
-
-  if (incident.resolved_at) {
-    items.push({ label: "Resolved", value: formatDate(incident.resolved_at) });
-  }
-
-  if (incident.closed_at) {
-    items.push({ label: "Closed", value: formatDate(incident.closed_at) });
-  }
-
-  return items;
-}
 
 function DeanIncidentDetailContent() {
   const params = useParams<{ id: string }>();
@@ -89,79 +55,176 @@ function DeanIncidentDetailContent() {
   }, [params.id]);
 
   if (isLoading) {
-    return <IncidentPageSkeleton />;
+    return (
+      <PageContainer width="app">
+        <IncidentPageSkeleton />
+      </PageContainer>
+    );
   }
 
   if (error || !incident) {
     return (
-      <IncidentPageState
-        message={error || "This incident could not be found."}
-        tone="danger"
-      />
+      <PageContainer width="app">
+        <IncidentPageState
+          message={error || "This incident could not be found."}
+          tone="danger"
+        />
+      </PageContainer>
     );
   }
 
+  const hasPhoto = incident.images.length > 0;
+  const locationPlace = formatLocationPlace(incident.location);
+  const showProgressMeta = Boolean(
+    incident.current_assignment ||
+      incident.verified_at ||
+      incident.resolved_at ||
+      incident.closed_at,
+  );
   const summary = getDeanStatusSummary(
     incident.status,
     incident.current_assignment?.assigned_official_name,
   );
 
   return (
-    <section className="py-6 md:py-10">
-      <IncidentDetailHeader
-        backHref="/dean/dashboard"
-        backLabel="Back to overview"
-        incidentNumber={incident.incident_number}
-        title={incident.title}
-        status={incident.status}
-        priority={incident.priority}
-        location={incident.location}
-        category={incident.category}
-        summary={summary}
-      />
+    <PageContainer width="app">
+      <section className="student-incident-detail py-4 md:py-6">
+        <Link
+          href="/dean/dashboard"
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-dark"
+        >
+          ← Back to overview
+        </Link>
 
-      <DetailJumpLinks actions /><div className="detail-layout">
-        <div className="detail-body">
-          <IncidentSection title="Description">
-            <p className="break-words whitespace-pre-wrap text-text-secondary">
-              {incident.description}
+        <div className="student-detail-headrow mt-3">
+          <div className="min-w-0">
+            <h1 className="public-incident-title min-w-0 break-words text-[24px] font-semibold leading-tight md:text-[30px]">
+              {incident.title}
+              <IncidentStatusBadge status={incident.status} />
+              {incident.priority ? (
+                <IncidentPriorityBadge priority={incident.priority} />
+              ) : null}
+            </h1>
+            <p className="mt-2 text-sm text-text-secondary">
+              <span className="font-medium text-foreground">{incident.incident_number}</span>
+              <span className="text-text-muted"> · </span>
+              <span className="font-medium text-foreground">{locationPlace}</span>
+              <span className="text-text-muted"> · </span>
+              <span>{incident.category.name}</span>
+              <span className="text-text-muted"> · </span>
+              <span>Submitted {formatDate(incident.created_at)}</span>
+              <span className="text-text-muted"> · </span>
+              <span>{getVisibilityLabel(incident.visibility)}</span>
             </p>
-            <div className="mt-6 border-t border-border pt-6">
-              <h3 className="mb-3 text-sm font-semibold text-foreground">Evidence</h3>
-              <IncidentEvidence images={incident.images} title={incident.title} />
-            </div>
-          </IncidentSection>
+            <p className="mt-2 text-sm text-text-secondary">{summary}</p>
+          </div>
+          <DeanAssignPanel incident={incident} onUpdated={setIncident} />
+        </div>
 
-          <IncidentSection title="Current details">
-            <IncidentMetaGrid items={buildMetaItems(incident)} />
+        <div className="student-detail-grid">
+          <div className="student-detail-main">
+            <div className="student-detail-card p-3 md:p-4">
+              <h2 className="text-base font-semibold">Description</h2>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-text-secondary md:text-[15px]">
+                {incident.description}
+              </p>
+            </div>
+
+            {hasPhoto ? (
+              <div className="student-detail-card p-3 md:p-4">
+                <h2 className="mb-2 text-base font-semibold">Photo</h2>
+                <IncidentEvidence images={incident.images} title={incident.title} compact />
+              </div>
+            ) : null}
+
+            <div className="student-detail-card p-3 md:p-4">
+              <h2 className="text-base font-semibold">Reporter information</h2>
+              <div className="mt-3">
+                <IncidentMetaGrid
+                  items={[
+                    { label: "Name", value: incident.reporter.name },
+                    { label: "Email", value: incident.reporter.email },
+                    { label: "Phone", value: incident.reporter.phone || "Not provided" },
+                    { label: "MC number", value: incident.reporter.mc_number },
+                  ]}
+                />
+              </div>
+            </div>
+
             {incident.current_assignment?.comment ? (
-              <div className="mt-5 border-t border-border pt-5">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">Assignment note</h3>
-                <p className="whitespace-pre-wrap text-sm text-text-secondary">
+              <div className="student-detail-card p-3 md:p-4">
+                <h2 className="text-base font-semibold">Assignment note</h2>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
                   {incident.current_assignment.comment}
                 </p>
               </div>
             ) : null}
-          </IncidentSection>
+          </div>
 
-          <IncidentTimeline incident={incident} />
-          <IncidentWorkflowNotes incident={incident} />
+          <aside className="student-detail-side">
+            <div className="student-detail-card p-3 md:p-4">
+              {showProgressMeta ? (
+                <dl className="mb-3 grid gap-x-4 gap-y-2 border-b border-border pb-3 text-sm">
+                  {incident.current_assignment ? (
+                    <div className="min-w-0">
+                      <dt className="text-text-muted">Assigned to</dt>
+                      <dd className="font-medium text-foreground">
+                        {incident.current_assignment.assigned_official_name}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {incident.verified_at ? (
+                    <div>
+                      <dt className="text-text-muted">Verified</dt>
+                      <dd className="font-medium">{formatDate(incident.verified_at)}</dd>
+                    </div>
+                  ) : null}
+                  {incident.resolved_at ? (
+                    <div>
+                      <dt className="text-text-muted">Resolved</dt>
+                      <dd className="font-medium">{formatDate(incident.resolved_at)}</dd>
+                    </div>
+                  ) : null}
+                  {incident.closed_at ? (
+                    <div>
+                      <dt className="text-text-muted">Closed</dt>
+                      <dd className="font-medium">{formatDate(incident.closed_at)}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
+              <IncidentTimeline incident={incident} compact />
+            </div>
+          </aside>
         </div>
 
-        <aside id="incident-actions" tabIndex={-1} className="detail-actions">
-          <DeanAssignPanel incident={incident} onUpdated={setIncident} />
-        </aside>
-      </div>
-    </section>
+        {incident.admin_review_note ||
+        incident.progress_note ||
+        incident.resolution_statement ||
+        incident.closure_note ||
+        incident.reopen_reason ? (
+          <div className="mt-3 flex flex-col gap-3">
+            {incident.admin_review_note ? (
+              <div className="student-detail-card p-3 md:p-4">
+                <h2 className="text-base font-semibold">Admin review note</h2>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
+                  {incident.admin_review_note}
+                </p>
+              </div>
+            ) : null}
+
+            <IncidentWorkflowNotes incident={incident} />
+          </div>
+        ) : null}
+      </section>
+    </PageContainer>
   );
 }
 
 export default function DeanIncidentDetailPage() {
   return (
     <RequireAuth allowedRoles={["DEAN"]}>
-      <PageContainer width="app">
-        <DeanIncidentDetailContent />
-      </PageContainer>
+      <DeanIncidentDetailContent />
     </RequireAuth>
   );
 }

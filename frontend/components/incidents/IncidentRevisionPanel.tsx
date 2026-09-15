@@ -4,14 +4,21 @@ import type { IncidentRevision } from "@/types";
 type IncidentRevisionPanelProps = {
   revision: IncidentRevision;
   title?: string;
+  variant?: "default" | "workspace";
 };
 
 export function IncidentRevisionPanel({
   revision,
   title = "Submitted changes",
+  variant = "default",
 }: IncidentRevisionPanelProps) {
+  const sectionClass =
+    variant === "workspace"
+      ? "student-detail-card p-3 md:p-4"
+      : "rounded-lg border border-border bg-surface p-4 md:p-6";
+
   return (
-    <section className="rounded-lg border border-border bg-surface p-4 md:p-6">
+    <section className={sectionClass}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-[18px] font-semibold">{title}</h2>

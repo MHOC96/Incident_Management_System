@@ -256,25 +256,25 @@ class IncidentOfficialDetailSerializer(IncidentDetailSerializer):
 
 class IncidentStudentDetailSerializer(IncidentDetailSerializer):
     current_assignment = serializers.SerializerMethodField()
-    pending_revision = serializers.SerializerMethodField()
+    has_pending_changes = serializers.SerializerMethodField()
     revision_history = serializers.SerializerMethodField()
 
     class Meta(IncidentDetailSerializer.Meta):
         fields = IncidentDetailSerializer.Meta.fields + [
             "current_assignment",
-            "pending_revision",
+            "has_pending_changes",
             "revision_history",
         ]
 
     def get_current_assignment(self, obj):
         return get_current_assignment_data(obj)
 
-    def get_pending_revision(self, obj):
-        revision = obj.revisions.filter(status=IncidentRevisionStatus.PENDING).first()
-        return IncidentRevisionSerializer(revision).data if revision else None
+    def get_has_pending_changes(self, obj):
+        return obj.revisions.filter(status=IncidentRevisionStatus.PENDING).exists()
 
     def get_revision_history(self, obj):
-        return IncidentRevisionSerializer(obj.revisions.all(), many=True).data
+        revisions = obj.revisions.exclude(status=IncidentRevisionStatus.PENDING)
+        return IncidentRevisionSerializer(revisions, many=True).data
 
 
 class IncidentCreateSerializer(serializers.ModelSerializer):

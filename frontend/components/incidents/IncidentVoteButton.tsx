@@ -75,7 +75,13 @@ export function IncidentVoteButton({
         title={user && !isStudent ? "Only students can upvote incidents" : label}
         className={`incident-vote-button ${hasUpvoted ? "is-active" : ""}`}
       >
-        <ArrowBigUp size={20} strokeWidth={1.8} aria-hidden="true" />
+        <ArrowBigUp
+          size={20}
+          strokeWidth={1.8}
+          fill={hasUpvoted ? "currentColor" : "none"}
+          aria-hidden="true"
+          className="shrink-0"
+        />
         {display === "full" ? (
           <>
             <span>{voteCount}</span>

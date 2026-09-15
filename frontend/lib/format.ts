@@ -39,22 +39,68 @@ export function getStatusClassName(status: IncidentStatus): string {
   return statusStyles[status];
 }
 
+const COLOMBO_TIME_ZONE = "Asia/Colombo";
+
 export function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-GB", {
+    timeZone: COLOMBO_TIME_ZONE,
     day: "2-digit",
     month: "short",
     year: "numeric",
   }).format(new Date(value));
 }
 
+/** Date and time in Sri Lanka (Colombo) for timelines and operational timestamps. */
+export function formatDateTimeColombo(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: COLOMBO_TIME_ZONE,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(value));
+}
+
+/** Place name only — never prefixes faculty (e.g. "Readima", not "Faculty … · Readima"). */
+export function formatLocationPlace(location: {
+  name: string;
+  building: string;
+  faculty?: string;
+}): string {
+  let place = (location.name || location.building || "").trim();
+  if (!place) {
+    return (location.faculty || "").trim();
+  }
+
+  const faculty = (location.faculty || "").trim();
+  if (faculty) {
+    const prefix = `${faculty} · `;
+    if (place.toLowerCase().startsWith(prefix.toLowerCase())) {
+      place = place.slice(prefix.length).trim();
+    }
+  }
+
+  const separator = " · ";
+  if (place.includes(separator)) {
+    const parts = place.split(separator).map((part) => part.trim());
+    const first = parts[0] ?? "";
+    if (parts.length >= 2 && /faculty|commerce|management studies/i.test(first)) {
+      return parts[parts.length - 1] ?? place;
+    }
+  }
+
+  return place;
+}
+
+/** @deprecated Use formatLocationPlace — kept for existing imports. */
 export function formatLocationLabel(location: {
   faculty: string;
   name: string;
   building: string;
 }): string {
-  const faculty = location.faculty || "Management Faculty";
-  const place = location.name || location.building;
-  return `${faculty} · ${place}`;
+  return formatLocationPlace(location);
 }
 
 const priorityLabels: Record<IncidentPriority, string> = {

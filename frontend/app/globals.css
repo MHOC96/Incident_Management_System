@@ -176,9 +176,9 @@
 .public-incident-row:hover { border-left-color: #800000; }
 .public-incident-title > .inline-flex { margin-left: 10px; vertical-align: middle; }
 .public-incident-row-meta { display: flex; align-items: center; align-self: start; gap: 16px; }
-.incident-vote-button { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; border: 1px solid var(--color-border); border-radius: 2px; background: var(--color-surface); padding: 8px 12px; color: var(--color-text-secondary); font-size: 14px; font-weight: 600; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
-.incident-vote-button:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
-.incident-vote-button.is-active { border-color: var(--color-primary); background: rgb(128 0 0 / 6%); color: var(--color-primary); }
+.incident-vote-button { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; border: none; border-radius: 2px; background: transparent; padding: 8px 12px; color: var(--color-text-secondary); font-size: 14px; font-weight: 600; transition: background-color 150ms ease, color 150ms ease; }
+.incident-vote-button:hover:not(:disabled) { color: var(--color-primary); }
+.incident-vote-button.is-active { color: var(--color-primary); }
 .incident-vote-button:disabled { cursor: not-allowed; opacity: .55; }
 .incident-vote-button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .workflow-list { margin-top: 30px; border-top: 1px solid #ddd; }
@@ -275,6 +275,128 @@ button:disabled { cursor: not-allowed; }
   .public-detail-layout > .incident-timeline { grid-column: 1; }
   .public-detail-layout:not(:has(.public-incident-photos)) { grid-template-columns: 1fr; }
 }
+/* Student incident detail — redesigned compact layout */
+.student-incident-detail .student-detail-headrow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.student-incident-detail .student-detail-card {
+  border: 1px solid var(--color-border);
+  border-top: 3px solid #192f59;
+  background: var(--color-surface);
+}
+.student-incident-detail .student-detail-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: start;
+}
+.student-incident-detail .student-detail-main,
+.student-incident-detail .student-detail-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.student-incident-detail .student-incident-timeline {
+  padding: 0; border: 0; background: transparent;
+}
+@media (min-width: 640px) {
+  .student-incident-detail .student-detail-headrow {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+}
+@media (min-width: 768px) {
+  .student-incident-detail .student-detail-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    column-gap: 16px;
+  }
+}
+/* Centered modals — stay fully visible on mobile (top layer / dialog) */
+dialog.workspace-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  width: min(calc(100vw - 2rem), 28rem);
+  max-height: min(90dvh, 100%);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  overflow: visible;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 18%);
+}
+dialog.workspace-dialog.workspace-dialog-wide {
+  width: min(calc(100vw - 2rem), 40rem);
+}
+dialog.workspace-dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+.workspace-dialog-panel {
+  display: flex;
+  max-height: min(90dvh, 100%);
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.workspace-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.25rem;
+  -webkit-overflow-scrolling: touch;
+}
+@media (min-width: 768px) {
+  .workspace-dialog-body {
+    padding: 1.25rem 1.5rem;
+  }
+}
+.workspace-dialog-footer {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding: 0.75rem 1.25rem 1rem;
+}
+@media (min-width: 768px) {
+  .workspace-dialog-footer {
+    padding: 0.75rem 1.5rem 1.25rem;
+  }
+}
+.workspace-priority-options {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.workspace-priority-option {
+  display: flex;
+  min-height: 44px;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--color-border);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+}
+.workspace-priority-option:has(input:checked) {
+  border-color: var(--color-primary);
+  background: rgb(128 0 0 / 6%);
+}
+.workspace-priority-option input {
+  height: 1rem;
+  width: 1rem;
+  flex-shrink: 0;
+}
 .notification-panel { position: absolute; right: 0; top: 100%; margin-top: 10px; width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column; max-height: min(480px, calc(100dvh - 150px)); z-index: 50; border: 1px solid var(--color-border); background: white; box-shadow: 0 8px 24px #00000012; overflow: hidden; }
 .notification-list { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 .official-accounts-layout { display: grid; gap: 24px; }
@@ -284,6 +406,14 @@ button:disabled { cursor: not-allowed; }
 .account-page-form { order: 1; }
 .account-page-support { order: 2; }
 .upload-target:focus-within { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+.admin-review-tabs { display: flex; flex-wrap: nowrap; gap: 4px 20px; overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 2px; border-bottom: 1px solid #ddd; -webkit-overflow-scrolling: touch; }
+.admin-review-tab { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; flex-shrink: 0; padding: 8px 4px; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; background: transparent; color: #192f59; font-family: var(--font-heading), sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.admin-review-tab:hover { color: #800000; }
+.admin-review-tab.is-active { border-bottom-color: #800000; color: #800000; font-weight: 600; }
+.admin-review-tab:focus-visible { outline: 2px solid #800000; outline-offset: 2px; }
+.admin-review-tab-count { display: inline-flex; min-width: 1.5rem; align-items: center; justify-content: center; padding: 2px 7px; border-radius: 2px; background: #f0f0f0; color: #626262; font-size: 12px; font-weight: 600; line-height: 1.2; }
+.admin-review-tab.is-active .admin-review-tab-count { background: rgb(128 0 0 / 10%); color: #800000; }
+.admin-review-tab-count.has-work { background: rgb(128 0 0 / 12%); color: #800000; }
 @media (min-width: 1024px) {
   .account-page-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; }
   .account-page-support { order: 1; }

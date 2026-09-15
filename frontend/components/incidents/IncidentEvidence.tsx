@@ -6,9 +6,10 @@ import type { IncidentImage } from "@/types";
 type IncidentEvidenceProps = {
   images: IncidentImage[];
   title: string;
+  compact?: boolean;
 };
 
-export function IncidentEvidence({ images, title }: IncidentEvidenceProps) {
+export function IncidentEvidence({ images, title, compact = false }: IncidentEvidenceProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingId = useId();
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -20,7 +21,13 @@ export function IncidentEvidence({ images, title }: IncidentEvidenceProps) {
 
   return (
     <div>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] justify-items-center gap-3">
+      <div
+        className={
+          compact
+            ? "grid gap-2"
+            : "grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] justify-items-center gap-3"
+        }
+      >
       {images.map((image, index) => (
         <button
           key={image.id}
@@ -29,7 +36,11 @@ export function IncidentEvidence({ images, title }: IncidentEvidenceProps) {
             setSelectedIndex(index);
             dialogRef.current?.showModal();
           }}
-          className="group relative w-full max-w-80 overflow-hidden rounded-md border border-border focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+          className={
+            compact
+              ? "group w-full overflow-hidden rounded-sm border border-border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              : "group relative w-full max-w-80 overflow-hidden rounded-md border border-border focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+          }
           aria-label={`View full photo ${index + 1} related to ${title}`}
           aria-haspopup="dialog"
         >
@@ -38,11 +49,17 @@ export function IncidentEvidence({ images, title }: IncidentEvidenceProps) {
             src={image.cloudinary_url}
             alt={`Photo ${index + 1} related to ${title}`}
             loading="lazy"
-            className="aspect-[16/9] w-full object-cover"
+            className={`w-full object-cover ${compact ? "aspect-[4/3] max-h-56" : "aspect-[16/9]"}`}
           />
-          <span className="flex min-h-11 items-center justify-center bg-surface px-2 text-sm font-medium text-primary group-hover:underline">
-            View photo {images.length > 1 ? index + 1 : ""}
-          </span>
+          {!compact ? (
+            <span className="flex min-h-11 items-center justify-center bg-surface px-2 text-sm font-medium text-primary group-hover:underline">
+              View photo {images.length > 1 ? index + 1 : ""}
+            </span>
+          ) : (
+            <span className="block px-2 py-2 text-xs font-medium text-primary group-hover:underline">
+              Tap to enlarge{images.length > 1 ? ` (${index + 1}/${images.length})` : ""}
+            </span>
+          )}
         </button>
       ))}
       </div>

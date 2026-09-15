@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
@@ -16,13 +16,17 @@ type Props = {
   onUpdated: (incident: StudentIncident) => void;
 };
 
+function isEditableStatus(status: StudentIncident["status"]): boolean {
+  return status === "SUBMITTED" || status === "UNDER_REVIEW" || status === "REJECTED";
+}
+
 export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
+  const editRef = useRef<HTMLDialogElement>(null);
+  const deleteRef = useRef<HTMLDialogElement>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState({
@@ -33,22 +37,38 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
     visibility: incident.visibility,
   });
 
-  useEffect(() => {
-    if (!isOpen || categories.length > 0) return;
-    void referenceService.listCategories().then(setCategories).catch(() => {
-      setError("We couldn't load the category list.");
-    });
-  }, [isOpen, categories.length]);
-
-  if (incident.pending_revision) {
+  if (incident.has_pending_changes) {
     return (
-      <section className="rounded-lg border border-primary/25 bg-primary/5 p-4 md:p-5">
-        <h2 className="text-[18px] font-semibold">Changes awaiting review</h2>
-        <p className="mt-2 text-sm text-text-secondary">
-          Your current incident remains active while an admin reviews the submitted changes.
-        </p>
-      </section>
+      <span className="inline-flex items-center rounded-sm border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary">
+        With admin for review
+      </span>
     );
+  }
+
+  const canDelete = isEditableStatus(incident.status);
+
+  function openEdit() {
+    setError("");
+    setSuccess("");
+    setForm({
+      title: incident.title,
+      description: incident.description,
+      category: String(incident.category.id),
+      location_name: incident.location.name,
+      visibility: incident.visibility,
+    });
+    if (categories.length === 0) {
+      void referenceService
+        .listCategories()
+        .then(setCategories)
+        .catch(() => setError("We couldn't load the category list."));
+    }
+    editRef.current?.showModal();
+  }
+
+  function openDelete() {
+    setError("");
+    deleteRef.current?.showModal();
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -65,11 +85,8 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
         visibility: form.visibility,
       });
       onUpdated(updated);
-      setIsOpen(false);
       setSuccess(
-        incident.status === "SUBMITTED" ||
-          incident.status === "UNDER_REVIEW" ||
-          incident.status === "REJECTED"
+        isEditableStatus(incident.status)
           ? "Your updated report was submitted for review."
           : "Your changes were submitted for admin approval.",
       );
@@ -88,90 +105,196 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
       router.replace("/student/dashboard");
     } catch (deleteError) {
       setError(formatApiError(deleteError, "We couldn't delete this report."));
-      setConfirmDelete(false);
     } finally {
       setIsDeleting(false);
     }
   }
 
-  const canDelete =
-    incident.status === "SUBMITTED" ||
-    incident.status === "UNDER_REVIEW" ||
-    incident.status === "REJECTED";
-
   return (
-    <section className="rounded-lg border border-border bg-surface p-4 md:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-[18px] font-semibold">Update incident</h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            {incident.status === "SUBMITTED" || incident.status === "UNDER_REVIEW" || incident.status === "REJECTED"
-              ? "Editing will resubmit this report for admin review."
-              : "Approved reports keep their current details until an admin accepts your changes."}
-          </p>
-        </div>
-        <Button type="button" variant="secondary" onClick={() => setIsOpen((value) => !value)}>
-          {isOpen ? "Cancel editing" : "Edit details"}
+    <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        className="px-4"
+        onClick={openEdit}
+      >
+        Edit details
+      </Button>
+      {canDelete ? (
+        <Button
+          type="button"
+          variant="ghost"
+          className="px-3 text-danger hover:text-danger"
+          onClick={openDelete}
+        >
+          Delete
         </Button>
-      </div>
-
-      {success ? <p className="mt-4 text-sm text-success">{success}</p> : null}
-
-      {isOpen ? (
-        <form className="mt-5 space-y-4 border-t border-border pt-5" onSubmit={handleSubmit}>
-          <FormField label="Incident title" htmlFor="edit-title" required>
-            <Input id="edit-title" value={form.title} minLength={5} maxLength={255} required onChange={(event) => setForm({ ...form, title: event.target.value })} />
-          </FormField>
-          <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Category" htmlFor="edit-category" required>
-              <Select id="edit-category" value={form.category} required searchable onChange={(event) => setForm({ ...form, category: event.target.value })}>
-                {categories.length === 0 ? <option value={incident.category.id}>{incident.category.name}</option> : null}
-                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </Select>
-            </FormField>
-            <FormField label="Location" htmlFor="edit-location" required>
-              <Input id="edit-location" value={form.location_name} minLength={2} maxLength={255} required onChange={(event) => setForm({ ...form, location_name: event.target.value })} />
-            </FormField>
-          </div>
-          <FormField label="Description" htmlFor="edit-description" required>
-            <Textarea id="edit-description" value={form.description} rows={6} required onChange={(event) => setForm({ ...form, description: event.target.value })} className="min-h-32 resize-y" />
-          </FormField>
-          <FormField label="Visibility" htmlFor="edit-visibility" required>
-            <Select id="edit-visibility" value={form.visibility} required onChange={(event) => setForm({ ...form, visibility: event.target.value as IncidentVisibility })}>
-              <option value="PRIVATE">Private</option>
-              <option value="PUBLIC">Public</option>
-              <option value="RESTRICTED">Restricted</option>
-            </Select>
-          </FormField>
-          {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
-          <Button type="submit" isLoading={isSubmitting} loadingText="Submitting changes...">
-            Submit changes for review
-          </Button>
-        </form>
       ) : null}
 
-      {canDelete ? (
-        <div className="mt-5 border-t border-border pt-5">
-          {!confirmDelete ? (
-            <Button type="button" variant="danger" onClick={() => setConfirmDelete(true)}>
-              Delete report
-            </Button>
+      {/* Edit dialog */}
+      <dialog
+        ref={editRef}
+        aria-label="Edit incident report"
+        className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-md border border-border bg-surface p-0 backdrop:bg-black/60"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) editRef.current?.close();
+        }}
+      >
+        <div className="max-h-[86dvh] overflow-auto p-4 md:p-6">
+          {success ? (
+            <div className="text-center">
+              <h2 className="text-lg font-semibold">Changes submitted</h2>
+              <p className="mt-2 text-sm text-text-secondary">{success}</p>
+              <Button
+                type="button"
+                className="mt-5"
+                onClick={() => editRef.current?.close()}
+              >
+                Done
+              </Button>
+            </div>
           ) : (
-            <div className="rounded-md border border-danger/30 bg-danger/5 p-4">
-              <h3 className="text-sm font-semibold text-foreground">Delete this report permanently?</h3>
-              <p className="mt-1 text-sm text-text-secondary">This action cannot be undone.</p>
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <Button type="button" variant="danger" isLoading={isDeleting} loadingText="Deleting report..." onClick={() => void handleDelete()}>
-                  Yes, delete report
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">Edit report</h2>
+                <button
+                  type="button"
+                  onClick={() => editRef.current?.close()}
+                  className="min-h-9 rounded-sm border border-border px-3 text-sm font-medium"
+                >
+                  Close
+                </button>
+              </div>
+              <p className="text-sm text-text-secondary">
+                {isEditableStatus(incident.status)
+                  ? "Editing will resubmit this report for admin review."
+                  : "Approved reports keep their current details until an admin accepts your changes."}
+              </p>
+
+              <FormField label="Incident title" htmlFor="edit-title" required>
+                <Input
+                  id="edit-title"
+                  value={form.title}
+                  minLength={5}
+                  maxLength={255}
+                  required
+                  onChange={(event) => setForm({ ...form, title: event.target.value })}
+                />
+              </FormField>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label="Category" htmlFor="edit-category" required>
+                  <Select
+                    id="edit-category"
+                    value={form.category}
+                    required
+                    searchable
+                    onChange={(event) => setForm({ ...form, category: event.target.value })}
+                  >
+                    {categories.length === 0 ? (
+                      <option value={incident.category.id}>{incident.category.name}</option>
+                    ) : null}
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <FormField label="Location" htmlFor="edit-location" required>
+                  <Input
+                    id="edit-location"
+                    value={form.location_name}
+                    minLength={2}
+                    maxLength={255}
+                    required
+                    onChange={(event) => setForm({ ...form, location_name: event.target.value })}
+                  />
+                </FormField>
+              </div>
+              <FormField label="Description" htmlFor="edit-description" required>
+                <Textarea
+                  id="edit-description"
+                  value={form.description}
+                  rows={6}
+                  required
+                  onChange={(event) => setForm({ ...form, description: event.target.value })}
+                  className="min-h-32 resize-y"
+                />
+              </FormField>
+              <FormField label="Visibility" htmlFor="edit-visibility" required>
+                <Select
+                  id="edit-visibility"
+                  value={form.visibility}
+                  required
+                  onChange={(event) =>
+                    setForm({ ...form, visibility: event.target.value as IncidentVisibility })
+                  }
+                >
+                  <option value="PRIVATE">Private</option>
+                  <option value="PUBLIC">Public</option>
+                  <option value="RESTRICTED">Restricted</option>
+                </Select>
+              </FormField>
+              {error ? (
+                <p className="text-sm text-danger" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => editRef.current?.close()}
+                >
+                  Cancel
                 </Button>
-                <Button type="button" variant="ghost" disabled={isDeleting} onClick={() => setConfirmDelete(false)}>
-                  Keep report
+                <Button type="submit" isLoading={isSubmitting} loadingText="Submitting changes...">
+                  Submit changes
                 </Button>
               </div>
-            </div>
+            </form>
           )}
         </div>
-      ) : null}
-    </section>
+      </dialog>
+
+      {/* Delete confirmation dialog */}
+      <dialog
+        ref={deleteRef}
+        aria-label="Delete incident report"
+        className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-md border border-border bg-surface p-0 backdrop:bg-black/60"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) deleteRef.current?.close();
+        }}
+      >
+        <div className="p-4 md:p-5">
+          <h2 className="text-base font-semibold text-foreground">Delete this report?</h2>
+          <p className="mt-1 text-sm text-text-secondary">This action cannot be undone.</p>
+          {error ? (
+            <p className="mt-3 text-sm text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isDeleting}
+              onClick={() => deleteRef.current?.close()}
+            >
+              Keep report
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              isLoading={isDeleting}
+              loadingText="Deleting..."
+              onClick={() => void handleDelete()}
+            >
+              Yes, delete
+            </Button>
+          </div>
+        </div>
+      </dialog>
+    </div>
   );
 }

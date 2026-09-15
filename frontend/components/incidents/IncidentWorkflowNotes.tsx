@@ -17,7 +17,7 @@ export function IncidentWorkflowNotes({ incident }: { incident: WorkflowNotes })
   if (notes.length === 0) return null;
 
   return (
-    <IncidentSection title="Operational updates">
+    <IncidentSection title="Operational updates" compact>
       <div className="divide-y divide-border">
         {notes.map((note) => (
           <div key={note.label} className="py-3 first:pt-0 last:pb-0">
