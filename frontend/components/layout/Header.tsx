@@ -15,6 +15,15 @@ export function Header() {
   const pathname = usePathname();
   const menuButton = useRef<HTMLButtonElement>(null);
   const [openPath, setOpenPath] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  async function signOut() {
+    setSigningOut(true);
+    setSignOutError("");
+    try { await logout(); setOpenPath(null); }
+    catch { setSignOutError("Sign out failed. Please try again."); }
+    finally { setSigningOut(false); }
+  }
   const menuOpen = openPath === pathname;
   const navItems = [
     ...(!isAuthenticated
@@ -45,14 +54,15 @@ export function Header() {
           {navItems.map(item => <Link key={item.href} href={item.href} aria-current={active(item.href) ? "page" : undefined}>{item.label}</Link>)}
         </nav>
         <div className="identity-actions">
-          {isAuthenticated && user ? <><NotificationBell onOpen={() => setOpenPath(null)} /><button className="desktop-signin header-signout" onClick={logout}>Sign out</button></> : <Link href="/login" className="desktop-signin">Sign in</Link>}
+          {isAuthenticated && user ? <><NotificationBell key={user.id} onOpen={() => setOpenPath(null)} /><button disabled={signingOut} className="desktop-signin header-signout" onClick={signOut}>{signingOut ? "Signing out…" : "Sign out"}</button></> : <Link href="/login" className="desktop-signin">Sign in</Link>}
           <button ref={menuButton} type="button" className="mobile-menu-button" aria-label={menuOpen ? "Close navigation" : "Open navigation"} aria-expanded={menuOpen} aria-controls="mobile-nav" onClick={() => setOpenPath(menuOpen ? null : pathname)}>{menuOpen ? <X size={23} /> : <Menu size={23} />}</button>
         </div>
       </div>
       {menuOpen && <nav id="mobile-nav" aria-label="Mobile navigation" className="mobile-navigation">
         {navItems.map(item => <Link key={item.href} href={item.href} aria-current={active(item.href) ? "page" : undefined} onClick={() => setOpenPath(null)}>{item.label}</Link>)}
-        {isAuthenticated ? <button onClick={() => { setOpenPath(null); logout(); }}>Sign out</button> : <Link href="/login" onClick={() => setOpenPath(null)}>Sign in</Link>}
+        {isAuthenticated ? <button disabled={signingOut} onClick={signOut}>{signingOut ? "Signing out…" : "Sign out"}</button> : <Link href="/login" onClick={() => setOpenPath(null)}>Sign in</Link>}
       </nav>}
+      {signOutError && <p role="alert" className="site-width text-sm text-danger">{signOutError}</p>}
     </header>
   );
 }

@@ -1,13 +1,13 @@
-import type { ApiError, AuthTokens } from "@/types";
+import type { ApiError } from "@/types";
 
 function normalizeApiUrl(url: string): string {
   const trimmed = url.trim().replace(/\/+$/, "");
   return trimmed.replace(/([^:]\/)\/+/g, "$1");
 }
 
-const API_URL = normalizeApiUrl(
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api",
-);
+const API_URL = normalizeApiUrl("/api");
+let csrfToken: string | null = null;
+let csrfRequest: Promise<void> | null = null;
 
 type RequestOptions = RequestInit & {
   auth?: boolean;
@@ -26,93 +26,48 @@ class ApiClientError extends Error {
   }
 }
 
-function getAccessToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
+async function ensureCsrfToken() {
+  if (csrfToken) return;
+  if (!csrfRequest) {
+    csrfRequest = request<{ csrfToken: string }>("/auth/session/", { auth: false })
+      .then(data => { csrfToken = data.csrfToken; })
+      .finally(() => { csrfRequest = null; });
   }
-  return localStorage.getItem("access_token");
-}
-
-function getRefreshToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return localStorage.getItem("refresh_token");
-}
-
-function setTokens(tokens: AuthTokens) {
-  localStorage.setItem("access_token", tokens.access);
-  localStorage.setItem("refresh_token", tokens.refresh);
-}
-
-function clearTokens() {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-}
-
-async function refreshAccessToken(): Promise<string | null> {
-  const refresh = getRefreshToken();
-  if (!refresh) {
-    return null;
-  }
-
-  const response = await fetch(`${API_URL}/auth/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
-  });
-
-  if (!response.ok) {
-    clearTokens();
-    return null;
-  }
-
-  const data = (await response.json()) as { access: string };
-  localStorage.setItem("access_token", data.access);
-  return data.access;
+  await csrfRequest;
 }
 
 function buildHeaders(options: RequestOptions): Headers {
   const headers = new Headers(options.headers);
   const useJson = options.json !== false;
 
-  if (useJson && !(options.body instanceof FormData)) {
+  if (useJson && options.body && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
-  if (options.auth !== false) {
-    const token = getAccessToken();
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
+  if (csrfToken && !["GET", "HEAD", "OPTIONS"].includes(options.method ?? "GET")) {
+    headers.set("X-CSRFToken", csrfToken);
   }
 
   return headers;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  let headers = buildHeaders(options);
-
-  let response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
-
-  if (response.status === 401 && options.auth !== false) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      headers = buildHeaders(options);
-      headers.set("Authorization", `Bearer ${newToken}`);
-      response = await fetch(`${API_URL}${path}`, {
-        ...options,
-        headers,
-      });
-    }
+  if (!["GET", "HEAD", "OPTIONS"].includes(options.method ?? "GET")) {
+    await ensureCsrfToken();
   }
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: buildHeaders(options),
+  });
 
   const payload = (await response.json().catch(() => ({}))) as ApiError;
 
   if (!response.ok) {
+    if (response.status === 401 && options.auth !== false && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("auth-expired"));
+    }
     throw new ApiClientError(
       payload.detail?.toString() ?? "Request failed.",
       response.status,
@@ -147,10 +102,7 @@ export const apiClient = {
     }),
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "DELETE" }),
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-  clearTokens,
+  setCsrfToken: (token: string | null) => { csrfToken = token; },
   getBaseUrl: () => API_URL,
 };
 

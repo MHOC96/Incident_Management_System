@@ -182,7 +182,8 @@ class AuthEndpointTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn("access", response.json())
+        self.assertIn("user", response.json())
+        self.assertNotIn("access", response.json())
 
     def test_student_cannot_log_in_with_email(self):
         User.objects.create_user(

@@ -1,23 +1,17 @@
-from datetime import datetime
+from django.db import transaction
+from django.utils import timezone
 
-from apps.incidents.models import Incident
+from apps.incidents.models import Incident, IncidentNumberSequence
 
 
+@transaction.atomic
 def generate_incident_number() -> str:
-    year = datetime.now().year
+    year = timezone.localdate().year
     prefix = f"INC-{year}-"
-
-    last_incident = (
-        Incident.objects.select_for_update()
-        .filter(incident_number__startswith=prefix)
-        .order_by("-incident_number")
-        .first()
-    )
-
-    if last_incident:
-        last_sequence = int(last_incident.incident_number.split("-")[-1])
-        next_sequence = last_sequence + 1
-    else:
-        next_sequence = 1
-
-    return f"{prefix}{next_sequence:05d}"
+    sequence, created = IncidentNumberSequence.objects.select_for_update().get_or_create(year=year)
+    if created:
+        numbers = Incident.objects.filter(incident_number__startswith=prefix).values_list("incident_number", flat=True)
+        sequence.value = max((int(n[len(prefix):]) for n in numbers if n[len(prefix):].isdigit()), default=0)
+    sequence.value += 1
+    sequence.save(update_fields=["value"])
+    return f"{prefix}{sequence.value:05d}"

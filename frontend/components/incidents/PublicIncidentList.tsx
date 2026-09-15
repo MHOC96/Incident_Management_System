@@ -1,6 +1,8 @@
 "use client";
 
-import { useDeferredValue, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { Pagination } from "@/components/ui/Pagination";
+import { useAuth } from "@/hooks/useAuth";
 import { PublicIncidentRow } from "@/components/incidents/PublicIncidentRow";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -14,6 +16,9 @@ type PublicIncidentListProps = {
 };
 
 export function PublicIncidentList({ limit }: PublicIncidentListProps) {
+  const { user } = useAuth();
+  const [page, setPage] = useState(1);
+  const [count, setCount] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [incidents, setIncidents] = useState<PublicIncident[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -25,7 +30,11 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
   const [ordering, setOrdering] = useState<"recent" | "highest_votes">("recent");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const deferredQuery = useDeferredValue(query);
+  const [deferredQuery, setDeferredQuery] = useState(query);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDeferredQuery(query), 300);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
 
   useEffect(() => {
     if (limit) return;
@@ -38,13 +47,15 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
     }).catch(() => {
       setError("The incident filters could not be loaded. Please refresh the page or try again later.");
     });
-  }, [limit]);
+  }, [limit, retryCount]);
 
   useEffect(() => {
+    const controller = new AbortController();
     void (async () => {
       try {
         if (limit) {
-          const response = await incidentService.listPublic({ ordering: "recent" });
+          const response = await incidentService.listPublic({ ordering: "recent" }, controller.signal);
+          if (controller.signal.aborted) return;
           setIncidents(response.results);
           return;
         }
@@ -55,15 +66,20 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
           location: locationId,
           stage,
           ordering,
-        });
+          page: String(page),
+        }, controller.signal);
+        if (controller.signal.aborted) return;
         setIncidents(response.results);
+        setCount(response.count);
       } catch {
+        if (controller.signal.aborted) return;
         setError("The public incident register could not be loaded. Please refresh the page or try again later.");
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     })();
-  }, [limit, retryCount, deferredQuery, categoryId, locationId, stage, ordering]);
+    return () => controller.abort();
+  }, [limit, retryCount, deferredQuery, categoryId, locationId, stage, ordering, page, user?.id]);
 
   const visible = typeof limit === "number" ? incidents.slice(0, limit) : incidents;
 
@@ -108,7 +124,7 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
           <Input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setQuery(event.target.value); setPage(1); }}
             placeholder={placeholders.searchIncidents}
             aria-label="Search by incident ID or title"
           />
@@ -117,7 +133,7 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
           <span className="mb-2 block">Category</span>
           <Select
             value={categoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
+            onChange={(event) => { setCategoryId(event.target.value); setPage(1); }}
             aria-label="Filter by category"
             searchable
             searchPlaceholder="Search categories..."
@@ -134,7 +150,7 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
           <span className="mb-2 block">Location</span>
           <Select
             value={locationId}
-            onChange={(event) => setLocationId(event.target.value)}
+            onChange={(event) => { setLocationId(event.target.value); setPage(1); }}
             aria-label="Filter by location"
             searchable
             searchPlaceholder="Search locations..."
@@ -149,7 +165,7 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
           </label>
           <label className="block text-sm font-semibold text-foreground">
           <span className="mb-2 block">Progress</span>
-          <Select value={stage} onChange={(event) => setStage(event.target.value as typeof stage)} aria-label="Filter by progress" searchable={false}>
+          <Select value={stage} onChange={(event) => { setStage(event.target.value as typeof stage); setPage(1); }} aria-label="Filter by progress" searchable={false}>
             <option value="">All progress</option>
             <option value="forwarded">Forwarded to Dean</option>
             <option value="in_progress">In progress</option>
@@ -158,7 +174,7 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
           </label>
           <label className="block text-sm font-semibold text-foreground">
           <span className="mb-2 block">Sort by</span>
-          <Select value={ordering} onChange={(event) => setOrdering(event.target.value as typeof ordering)} aria-label="Sort incidents" searchable={false}>
+          <Select value={ordering} onChange={(event) => { setOrdering(event.target.value as typeof ordering); setPage(1); }} aria-label="Sort incidents" searchable={false}>
             <option value="recent">Most recent</option>
             <option value="highest_votes">Highest votes</option>
           </Select>
@@ -168,8 +184,8 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
 
       {!limit && (query || categoryId || locationId || stage || ordering !== "recent") ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p role="status" className="text-sm text-text-secondary">{visible.length} matching {visible.length === 1 ? "incident" : "incidents"}</p>
-          <Button variant="ghost" onClick={() => { setQuery(""); setCategoryId(""); setLocationId(""); setStage(""); setOrdering("recent"); }}>Clear filters</Button>
+          <p role="status" className="text-sm text-text-secondary">{count} matching {count === 1 ? "incident" : "incidents"}</p>
+          <Button variant="ghost" onClick={() => { setPage(1); setQuery(""); setCategoryId(""); setLocationId(""); setStage(""); setOrdering("recent"); }}>Clear filters</Button>
         </div>
       ) : null}
       {visible.length === 0 ? (
@@ -185,6 +201,7 @@ export function PublicIncidentList({ limit }: PublicIncidentListProps) {
           ))}
         </div>
       )}
+      {!limit && <Pagination page={page} count={count} onChange={setPage} />}
     </div>
   );
 }

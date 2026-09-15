@@ -37,7 +37,7 @@ export function LoginForm() {
     try {
       const profile = await login(buildLoginPayload(username, password));
       const returnTo = new URLSearchParams(window.location.search).get("returnTo");
-      const safeReturnTo = returnTo?.startsWith("/") && !returnTo.startsWith("//")
+      const safeReturnTo = returnTo?.startsWith("/") && !returnTo.startsWith("//") && !returnTo.includes("\\")
         ? returnTo
         : getDashboardRoute(profile.role);
       router.push(safeReturnTo);

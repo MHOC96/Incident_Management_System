@@ -23,6 +23,7 @@ export function NotificationBell({ onOpen }: NotificationBellProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const refreshCount = useCallback(async () => {
+    if (document.visibilityState !== "visible") return;
     try {
       const data = await notificationService.unreadCount();
       setUnreadCount(data.count);
@@ -45,17 +46,18 @@ export function NotificationBell({ onOpen }: NotificationBellProps) {
 
   useEffect(() => {
     if (!user) return;
-    void refreshCount();
+    const first = window.setTimeout(() => { void refreshCount(); }, 0);
     const interval = window.setInterval(() => {
       void refreshCount();
     }, 60000);
-    return () => window.clearInterval(interval);
+    const onVisible = () => { void refreshCount(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [user, refreshCount]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    void loadNotifications();
-  }, [isOpen, loadNotifications]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -111,15 +113,10 @@ export function NotificationBell({ onOpen }: NotificationBellProps) {
         aria-expanded={isOpen}
         aria-controls="notification-panel"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
-        onClick={() =>
-          setIsOpen((open) => {
-            const next = !open;
-            if (next) {
-              onOpen?.();
-            }
-            return next;
-          })
-        }
+        onClick={() => {
+          if (!isOpen) { onOpen?.(); void loadNotifications(); }
+          setIsOpen(!isOpen);
+        }}
         className="relative inline-flex h-11 min-w-11 justify-center items-center rounded-md px-2 text-sm text-text-secondary hover:bg-surface-hover hover:text-foreground"
       >
         <Bell size={20} aria-hidden="true" /><span className="hidden xl:inline ml-2">Notifications</span>

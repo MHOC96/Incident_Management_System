@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.utils import timezone
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -64,6 +64,7 @@ from apps.incidents.services import (
     transition_incident,
 )
 from apps.incidents.querysets import (
+    PUBLIC_VISIBLE_STATUSES,
     optimized_incident_queryset,
     public_incident_queryset,
 )
@@ -89,7 +90,10 @@ class CategoryListView(generics.ListAPIView):
 
 
 class LocationListView(generics.ListAPIView):
-    queryset = Location.objects.filter(is_active=True)
+    # Free-text locations from private/unreviewed reports are not public reference data.
+    queryset = Location.objects.filter(
+        is_active=True, incidents__visibility="PUBLIC", incidents__status__in=PUBLIC_VISIBLE_STATUSES,
+    ).distinct()
     serializer_class = LocationSerializer
     permission_classes = [permissions.AllowAny]
     pagination_class = None
@@ -98,6 +102,12 @@ class LocationListView(generics.ListAPIView):
 class IncidentViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     permission_classes = [IsActiveUser, IncidentObjectPermission]
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            with transaction.atomic():
+                return super().dispatch(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_throttles(self):
         if self.action == "create":
@@ -110,16 +120,23 @@ class IncidentViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return public_incident_queryset(user)
 
-        queryset = optimized_incident_queryset()
+        queryset = optimized_incident_queryset(detail=bool(self.kwargs.get("pk")))
+        queryset = queryset.annotate(priority_rank=Case(
+            When(priority="CRITICAL", then=Value(4)), When(priority="HIGH", then=Value(3)),
+            When(priority="MEDIUM", then=Value(2)), When(priority="LOW", then=Value(1)),
+            default=Value(0), output_field=IntegerField(),
+        ))
+        if self.request.method not in {"GET", "HEAD", "OPTIONS"}:
+            queryset = queryset.select_for_update(of=("self",))
 
         if user.role in {UserRole.ADMIN, UserRole.DEAN}:
             return queryset
 
         if user.role == UserRole.OFFICIAL:
-            return queryset.filter(
-                assignments__assigned_official=user,
-                assignments__is_current=True,
-            ).distinct()
+            from apps.assignments.models import Assignment
+            return queryset.filter(pk__in=Assignment.objects.filter(
+                assigned_official=user, is_current=True,
+            ).values("incident_id"))
 
         return queryset.filter(reporter=user)
 
@@ -235,6 +252,36 @@ class IncidentViewSet(viewsets.ModelViewSet):
             related_incident=incident,
         )
 
+    @action(detail=False, methods=["get"], url_path="queue-counts")
+    def queue_counts(self, request):
+        filters = {
+            UserRole.ADMIN: {
+                "review": Q(status__in=PENDING_REVIEW_STATUSES),
+                "changes": Q(revisions__status=IncidentRevisionStatus.PENDING),
+                "forwarded": Q(status__in=[IncidentStatus.FORWARDED_TO_DEAN, IncidentStatus.ASSIGNED,
+                    IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED, IncidentStatus.CLOSED]),
+                "rejected": Q(status=IncidentStatus.REJECTED),
+            },
+            UserRole.DEAN: {
+                "assignment": Q(status=IncidentStatus.FORWARDED_TO_DEAN),
+                "underway": Q(status__in=[IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED]),
+                "completed": Q(status=IncidentStatus.CLOSED),
+            },
+            UserRole.OFFICIAL: {
+                "active": Q(status__in=[IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS]),
+                "completed": Q(status__in=[IncidentStatus.RESOLVED, IncidentStatus.CLOSED]),
+            },
+            UserRole.STUDENT: {
+                "total": Q(), "underReview": Q(status__in=PENDING_REVIEW_STATUSES),
+                "inProgress": Q(status__in=[IncidentStatus.VERIFIED, IncidentStatus.FORWARDED_TO_DEAN,
+                    IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS]),
+                "resolved": Q(status__in=[IncidentStatus.RESOLVED, IncidentStatus.CLOSED]),
+            },
+        }[request.user.role]
+        return Response(self.get_queryset().aggregate(**{
+            key: Count("id", distinct=True, filter=condition) for key, condition in filters.items()
+        }))
+
     @action(detail=False, methods=["get"], url_path="official-stats")
     def official_stats(self, request):
         queryset = self.get_queryset()
@@ -261,7 +308,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
                     IncidentStatus.IN_PROGRESS,
                 }
             )
-            .order_by("-priority", "-updated_at")
+            .order_by("-priority_rank", "-updated_at", "-pk")
         )
         page = self.paginate_queryset(queryset)
         serializer = IncidentOfficialDetailSerializer(page, many=True)
@@ -308,7 +355,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         queryset = (
             self.get_queryset()
             .filter(status=IncidentStatus.FORWARDED_TO_DEAN)
-            .order_by("-priority", "created_at")
+            .order_by("-priority_rank", "created_at", "pk")
         )
         page = self.paginate_queryset(queryset)
         serializer = IncidentDeanDetailSerializer(page, many=True)
@@ -325,7 +372,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
                     IncidentStatus.RESOLVED,
                 }
             )
-            .order_by("-priority", "-updated_at")
+            .order_by("-priority_rank", "-updated_at", "-pk")
         )
         page = self.paginate_queryset(queryset)
         serializer = IncidentDeanDetailSerializer(page, many=True)
@@ -550,6 +597,10 @@ class IncidentViewSet(viewsets.ModelViewSet):
     )
     def upload_image(self, request, pk=None):
         incident = self.get_object()
+        if incident.status == IncidentStatus.CLOSED:
+            raise ValidationError({"image": "Closed incidents cannot accept new evidence."})
+        if incident.images.count() >= 5:
+            raise ValidationError({"image": "An incident can contain up to five images."})
 
         if request.user.role == UserRole.STUDENT:
             if incident.reporter_id != request.user.id:
@@ -648,22 +699,28 @@ class IncidentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="vote")
     def toggle_vote(self, request, pk=None):
-        incident = public_incident_queryset(request.user).filter(pk=pk).first()
+        incident = Incident.objects.select_for_update().filter(
+            pk=pk, visibility="PUBLIC", status__in=PUBLIC_VISIBLE_STATUSES,
+        ).first()
         if not incident:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        desired = request.data.get("upvoted")
+        if desired is not None and not isinstance(desired, bool):
+            raise ValidationError({"upvoted": "Use true or false."})
         with transaction.atomic():
             vote, created = IncidentVote.objects.get_or_create(
                 incident=incident,
                 user=request.user,
             )
-            if not created:
+            if desired is False or (desired is None and not created):
                 vote.delete()
+            upvoted = desired if desired is not None else created
 
         return Response(
             {
                 "vote_count": IncidentVote.objects.filter(incident=incident).count(),
-                "user_has_upvoted": created,
+                "user_has_upvoted": upvoted,
             },
         )
 

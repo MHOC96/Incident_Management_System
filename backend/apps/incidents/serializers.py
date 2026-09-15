@@ -54,6 +54,11 @@ class LocationSerializer(serializers.ModelSerializer):
 
 
 class IncidentImageSerializer(serializers.ModelSerializer):
+    cloudinary_url = serializers.SerializerMethodField()
+
+    def get_cloudinary_url(self, obj):
+        return f"/api/incident-images/{obj.pk}/"
+
     class Meta:
         model = IncidentImage
         fields = [
@@ -139,7 +144,17 @@ class PublicIncidentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class IncidentAdminReviewSerializer(serializers.ModelSerializer):
+class IncidentRecordSerializer(serializers.ModelSerializer):
+    def get_fields(self):
+        fields = super().get_fields()
+        if isinstance(self.parent, serializers.ListSerializer):
+            for name in ["revision_history", "images", "description", "admin_review_note", "progress_note",
+                         "resolution_statement", "closure_note", "reopen_reason"]:
+                fields.pop(name, None)
+        return fields
+
+
+class IncidentAdminReviewSerializer(IncidentRecordSerializer):
     category = CategorySerializer(read_only=True)
     location = LocationSerializer(read_only=True)
     images = IncidentImageSerializer(many=True, read_only=True)
@@ -177,14 +192,14 @@ class IncidentAdminReviewSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_pending_revision(self, obj):
-        revision = obj.revisions.filter(status=IncidentRevisionStatus.PENDING).first()
+        revision = next((r for r in obj.revisions.all() if r.status == IncidentRevisionStatus.PENDING), None)
         return IncidentRevisionSerializer(revision).data if revision else None
 
     def get_revision_history(self, obj):
         return IncidentRevisionSerializer(obj.revisions.all(), many=True).data
 
 
-class IncidentDetailSerializer(serializers.ModelSerializer):
+class IncidentDetailSerializer(IncidentRecordSerializer):
     category = CategorySerializer(read_only=True)
     location = LocationSerializer(read_only=True)
     images = IncidentImageSerializer(many=True, read_only=True)
@@ -270,10 +285,10 @@ class IncidentStudentDetailSerializer(IncidentDetailSerializer):
         return get_current_assignment_data(obj)
 
     def get_has_pending_changes(self, obj):
-        return obj.revisions.filter(status=IncidentRevisionStatus.PENDING).exists()
+        return any(r.status == IncidentRevisionStatus.PENDING for r in obj.revisions.all())
 
     def get_revision_history(self, obj):
-        revisions = obj.revisions.exclude(status=IncidentRevisionStatus.PENDING)
+        revisions = [r for r in obj.revisions.all() if r.status != IncidentRevisionStatus.PENDING]
         return IncidentRevisionSerializer(revisions, many=True).data
 
 

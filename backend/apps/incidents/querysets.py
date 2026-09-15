@@ -36,16 +36,19 @@ REVISION_PREFETCH = Prefetch(
 )
 
 
-def optimized_incident_queryset():
-    return Incident.objects.select_related(
+def optimized_incident_queryset(*, detail=True):
+    revisions = REVISION_PREFETCH if detail else Prefetch(
+        "revisions", queryset=REVISION_PREFETCH.queryset.filter(status="PENDING")
+    )
+    queryset = Incident.objects.select_related(
         "category",
         "location",
         "reporter",
     ).prefetch_related(
-        "images",
         CURRENT_ASSIGNMENT_PREFETCH,
-        REVISION_PREFETCH,
+        revisions,
     )
+    return queryset.prefetch_related("images") if detail else queryset
 
 
 def public_incident_queryset(user=None):

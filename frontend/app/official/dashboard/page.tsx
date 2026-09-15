@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useIncidentQueue } from "@/hooks/useIncidentQueue";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   OfficialReviewQueueTabs,
-  pickDefaultOfficialView,
   type OfficialQueueView,
 } from "@/components/official/OfficialReviewQueueTabs";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentTable } from "@/components/dashboard/IncidentTable";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { officialIncidentService } from "@/services/officialIncidents";
 import type { OfficialIncident } from "@/types";
 
 function toOfficialRow(incident: OfficialIncident) {
@@ -25,43 +24,10 @@ function toOfficialRow(incident: OfficialIncident) {
   };
 }
 
+const QUEUES: Record<OfficialQueueView, string> = {"active":"/incidents/assigned/","completed":"/incidents/completed/"};
+
 function OfficialDashboardContent() {
-  const [datasets, setDatasets] = useState<Record<OfficialQueueView, OfficialIncident[]>>({
-    active: [],
-    completed: [],
-  });
-  const [activeView, setActiveView] = useState<OfficialQueueView>("active");
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    void (async () => {
-      const results = await Promise.allSettled([
-        officialIncidentService.listActiveAssignments(),
-        officialIncidentService.listCompleted(),
-      ]);
-      const nextDatasets = {
-        active: results[0].status === "fulfilled" ? results[0].value.results : [],
-        completed: results[1].status === "fulfilled" ? results[1].value.results : [],
-      };
-      setDatasets(nextDatasets);
-      setActiveView(
-        pickDefaultOfficialView({
-          active: nextDatasets.active.length,
-          completed: nextDatasets.completed.length,
-        }),
-      );
-      if (results.some((result) => result.status === "rejected")) {
-        setError("Some incident lists could not be loaded. Refresh the page to try again.");
-      }
-      setIsLoading(false);
-    })();
-  }, []);
-
-  const counts: Record<OfficialQueueView, number> = {
-    active: datasets.active.length,
-    completed: datasets.completed.length,
-  };
+  const { activeView, setActiveView, counts, items, isLoading, error, page, count, setPage } = useIncidentQueue<OfficialQueueView, OfficialIncident>(QUEUES, "active");
 
   const copy: Record<OfficialQueueView, { title: string; empty: string; description: string }> = {
     active: {
@@ -76,7 +42,7 @@ function OfficialDashboardContent() {
     },
   };
 
-  const rows = datasets[activeView].map(toOfficialRow);
+  const rows = items.map(toOfficialRow);
 
   return (
     <PageContainer width="app">
@@ -112,6 +78,7 @@ function OfficialDashboardContent() {
                 emptyDescription={copy[activeView].description}
                 dateLabel="Updated"
               />
+              <Pagination page={page} count={count} onChange={setPage} />
             </div>
           </>
         )}

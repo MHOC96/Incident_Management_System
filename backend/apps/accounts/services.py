@@ -3,12 +3,14 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.common.choices import AccountStatus, UserRole
 
 
+@transaction.atomic
 def create_official_invitation(*, dean, validated_data):
     token = secrets.token_urlsafe(48)
     expires_at = timezone.now() + timedelta(days=7)
@@ -57,9 +59,10 @@ def create_official_invitation(*, dean, validated_data):
     return user
 
 
+@transaction.atomic
 def activate_official_account(*, token: str, password: str) -> User:
     try:
-        user = User.objects.get(
+        user = User.objects.select_for_update().get(
             activation_token=token,
             role=UserRole.OFFICIAL,
             status=AccountStatus.INVITED,

@@ -6,9 +6,6 @@ __pycache__/
 venv/
 .env
 
-# Local-only ops (never commit)
-apps/incidents/management/commands/purge_incidents.py
-
 # Django
 db.sqlite3
 staticfiles/

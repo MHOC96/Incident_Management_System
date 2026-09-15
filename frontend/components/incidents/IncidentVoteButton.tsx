@@ -52,7 +52,7 @@ export function IncidentVoteButton({
     onChange(optimistic);
 
     try {
-      onChange(await incidentService.toggleVote(incidentId));
+      onChange(await incidentService.toggleVote(incidentId, !hasUpvoted));
     } catch {
       onChange(previous);
       setError("Vote could not be updated. Please try again.");

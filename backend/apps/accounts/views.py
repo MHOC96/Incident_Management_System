@@ -1,11 +1,12 @@
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
+from django.middleware.csrf import get_token
+from smtplib import SMTPException
+import hashlib
+from rest_framework.authentication import SessionAuthentication
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenRefreshView
-
-from apps.accounts.auth import ActiveAccountTokenRefreshSerializer
 from apps.accounts.serializers import (
     LoginSerializer,
     OfficialAccountSerializer,
@@ -26,8 +27,14 @@ class RegistrationThrottle(AnonRateThrottle):
     scope = "registration"
 
 
-class LoginThrottle(AnonRateThrottle):
+class LoginThrottle(UserRateThrottle):
     scope = "login"
+
+    def get_cache_key(self, request, view):
+        identifier = str(request.user.pk) if request.user.is_authenticated else str(
+            request.data.get("mc_number") or request.data.get("email") or self.get_ident(request)
+        ).strip().casefold().replace(" ", "")
+        return self.cache_format % {"scope": self.scope, "ident": hashlib.sha256(identifier.encode()).hexdigest()}
 
 
 class OfficialActivateView(APIView):
@@ -70,7 +77,8 @@ class StudentPasswordChangeView(APIView):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        user = serializer.save()
+        update_session_auth_hash(request, user)
         return Response({"detail": "Password updated."})
 
 
@@ -86,13 +94,31 @@ class LoginView(APIView):
     throttle_classes = [LoginThrottle]
 
     def post(self, request):
+        SessionAuthentication().enforce_csrf(request)
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.validated_data)
+        user = serializer.validated_data["user"]
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        return Response({"user": UserProfileSerializer(user).data, "csrfToken": get_token(request)})
 
 
-class CustomTokenRefreshView(TokenRefreshView):
-    serializer_class = ActiveAccountTokenRefreshSerializer
+class SessionView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return Response({
+            "user": UserProfileSerializer(request.user).data if request.user.is_authenticated else None,
+            "csrfToken": get_token(request),
+        })
+
+
+class LogoutView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        SessionAuthentication().enforce_csrf(request)
+        logout(request)
+        return Response({"detail": "Signed out."})
 
 
 class OfficialAccountViewSet(viewsets.ModelViewSet):
@@ -113,10 +139,13 @@ class OfficialAccountViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = create_official_invitation(
-            dean=request.user,
-            validated_data=serializer.validated_data,
-        )
+        try:
+            user = create_official_invitation(
+                dean=request.user,
+                validated_data=serializer.validated_data,
+            )
+        except (SMTPException, OSError):
+            return Response({"detail": "The invitation email could not be sent. Please try again."}, status=503)
         return Response(
             OfficialAccountSerializer(user).data,
             status=status.HTTP_201_CREATED,

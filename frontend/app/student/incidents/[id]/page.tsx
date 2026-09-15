@@ -204,9 +204,10 @@ function StudentIncidentDetailContent() {
 }
 
 export default function StudentIncidentDetailPage() {
+  const params = useParams<{ id: string }>();
   return (
     <RequireAuth allowedRoles={["STUDENT"]}>
-      <StudentIncidentDetailContent />
+      <StudentIncidentDetailContent key={params.id} />
     </RequireAuth>
   );
 }

@@ -1,4 +1,4 @@
-from rest_framework import status, viewsets
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -7,7 +7,8 @@ from apps.notifications.models import Notification
 from apps.notifications.serializers import NotificationMarkReadSerializer, NotificationSerializer
 
 
-class NotificationViewSet(viewsets.ModelViewSet):
+class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                          mixins.UpdateModelMixin, viewsets.GenericViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsActiveUser]
     http_method_names = ["get", "post", "patch", "head", "options"]

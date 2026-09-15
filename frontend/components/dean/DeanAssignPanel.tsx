@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Select } from "@/components/ui/Select";
@@ -28,10 +28,6 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState<null | "assign" | "close">(null);
   const { message, showToast, dismissToast } = useToast();
-
-  useEffect(() => {
-    setPriority(incident.priority ?? "MEDIUM");
-  }, [incident.priority]);
 
   async function ensureAssignmentOptions() {
     if (optionsLoaded) {

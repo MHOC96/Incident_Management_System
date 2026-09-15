@@ -1,56 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useIncidentQueue } from "@/hooks/useIncidentQueue";
+import { Pagination } from "@/components/ui/Pagination";
+import { apiClient } from "@/lib/api";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentTable } from "@/components/dashboard/IncidentTable";
 import { StatsStrip } from "@/components/dashboard/StatsStrip";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { incidentService } from "@/services/incidents";
-import type { IncidentDetail, IncidentStatus } from "@/types";
+import type { IncidentDetail } from "@/types";
 
-const underReviewStatuses: IncidentStatus[] = ["SUBMITTED", "UNDER_REVIEW"];
-const inProgressStatuses: IncidentStatus[] = [
-  "VERIFIED",
-  "FORWARDED_TO_DEAN",
-  "ASSIGNED",
-  "IN_PROGRESS",
-];
-const resolvedStatuses: IncidentStatus[] = ["RESOLVED", "CLOSED"];
-
+const QUEUES = { mine: "/incidents/" };
 function StudentDashboardContent() {
-  const [incidents, setIncidents] = useState<IncidentDetail[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-
+  const { items: incidents, isLoading, error, page, count, setPage } = useIncidentQueue<"mine", IncidentDetail>(QUEUES, "mine", false);
+  const [stats, setStats] = useState({ total: 0, underReview: 0, inProgress: 0, resolved: 0 });
   useEffect(() => {
-    void (async () => {
-      try {
-        const response = await incidentService.listMine();
-        setIncidents(response.results);
-      } catch {
-        setError("We couldn't load your incidents.");
-      } finally {
-        setIsLoading(false);
-      }
-    })();
+    const controller = new AbortController();
+    void apiClient.get<typeof stats>("/incidents/queue-counts/", { signal: controller.signal }).then(setStats).catch(() => {});
+    return () => controller.abort();
   }, []);
-
-  const stats = useMemo(
-    () => ({
-      total: incidents.length,
-      underReview: incidents.filter((item) =>
-        underReviewStatuses.includes(item.status),
-      ).length,
-      inProgress: incidents.filter((item) =>
-        inProgressStatuses.includes(item.status),
-      ).length,
-      resolved: incidents.filter((item) =>
-        resolvedStatuses.includes(item.status),
-      ).length,
-    }),
-    [incidents],
-  );
 
   return (
     <PageContainer width="app">
@@ -109,6 +78,7 @@ function StudentDashboardContent() {
                   emptyDescription="Submit a report when you notice a problem on campus."
                   showIncidentNumber={false}
                 />
+                <Pagination page={page} count={count} onChange={setPage} />
               </div>
             )}
           </>

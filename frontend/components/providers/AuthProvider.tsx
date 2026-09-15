@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -17,7 +18,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (payload: LoginPayload) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
 
@@ -26,40 +27,49 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const generation = useRef(0);
 
   const refreshProfile = useCallback(async () => {
-    const token = authService.getAccessToken();
-    if (!token) {
-      setUser(null);
-      return;
-    }
-
+    const current = generation.current;
     try {
-      const profile = await authService.fetchProfile();
-      setUser(profile);
+      const session = await authService.session();
+      if (current === generation.current) setUser(session.user);
     } catch {
-      authService.clearTokens();
-      setUser(null);
+      if (current === generation.current) setUser(null);
     }
   }, []);
 
   useEffect(() => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    const expired = () => { generation.current++; setUser(null); };
+    const channel = new BroadcastChannel("incident-session");
+    channel.onmessage = () => { generation.current++; void refreshProfile(); };
+    window.addEventListener("auth-expired", expired);
     void (async () => {
       await refreshProfile();
       setIsLoading(false);
     })();
+    return () => { channel.close(); window.removeEventListener("auth-expired", expired); };
   }, [refreshProfile]);
 
   const login = useCallback(async (payload: LoginPayload) => {
-    await authService.login(payload);
-    const profile = await authService.fetchProfile();
+    generation.current++;
+    const profile = await authService.login(payload);
     setUser(profile);
+    const channel = new BroadcastChannel("incident-session");
+    channel.postMessage("changed");
+    channel.close();
     return profile;
   }, []);
 
-  const logout = useCallback(() => {
-    authService.clearTokens();
+  const logout = useCallback(async () => {
+    generation.current++;
+    await authService.logout();
     setUser(null);
+    const channel = new BroadcastChannel("incident-session");
+    channel.postMessage("changed");
+    channel.close();
   }, []);
 
   const value = useMemo(

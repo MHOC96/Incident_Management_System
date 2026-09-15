@@ -13,21 +13,28 @@ import type { PublicIncident } from "@/types";
 
 export default function PublicIncidentDetailPage() {
   const params = useParams<{ id: string }>();
+  return <PublicIncidentDetailContent key={params.id} />;
+}
+
+function PublicIncidentDetailContent() {
+  const params = useParams<{ id: string }>();
   const [incident, setIncident] = useState<PublicIncident | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let ignore = false;
     void (async () => {
       try {
         const data = await incidentService.getPublic(Number(params.id));
-        setIncident(data);
+        if (!ignore) setIncident(data);
       } catch {
-        setError("This incident could not be found or is not publicly visible.");
+        if (!ignore) setError("This incident could not be found or is not publicly visible.");
       } finally {
-        setIsLoading(false);
+        if (!ignore) setIsLoading(false);
       }
     })();
+    return () => { ignore = true; };
   }, [params.id]);
 
   return (

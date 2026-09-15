@@ -230,7 +230,6 @@ export function Select({
 
   useEffect(() => {
     if (!open) {
-      setSearchQuery("");
       return;
     }
 
@@ -281,9 +280,10 @@ export function Select({
         aria-expanded={open}
         aria-controls={listId}
         aria-label={ariaLabel}
-        aria-required={required || undefined}
+        aria-describedby={required ? `${listId}-required` : undefined}
         onClick={() => {
           if (!disabled) {
+            setSearchQuery("");
             setOpen((current) => !current);
           }
         }}
@@ -292,6 +292,7 @@ export function Select({
         <span className="truncate">{displayLabel}</span>
         <span aria-hidden="true" className="ml-2 shrink-0 text-text-muted">▾</span>
       </button>
+      {required && <span id={`${listId}-required`} className="sr-only">Required</span>}
 
       {open && menuPosition && portalRoot
         ? createPortal(

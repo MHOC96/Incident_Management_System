@@ -1,11 +1,26 @@
 import { apiClient } from "@/lib/api";
-import type { AuthTokens, LoginPayload, PasswordChangePayload, User } from "@/types";
+import type { LoginPayload, PasswordChangePayload, User } from "@/types";
+
+type SessionResponse = { user: User | null; csrfToken: string };
+let sessionRequest: Promise<SessionResponse> | null = null;
 
 export const authService = {
-  async login(payload: LoginPayload): Promise<AuthTokens> {
-    const tokens = await apiClient.post<AuthTokens>("/auth/login/", payload, { auth: false });
-    apiClient.setTokens(tokens);
-    return tokens;
+  async login(payload: LoginPayload): Promise<User> {
+    const data = await apiClient.post<SessionResponse>("/auth/login/", payload, { auth: false });
+    apiClient.setCsrfToken(data.csrfToken);
+    return data.user!;
+  },
+
+  async session(): Promise<SessionResponse> {
+    sessionRequest ??= apiClient.get<SessionResponse>("/auth/session/", { auth: false })
+      .then(data => { apiClient.setCsrfToken(data.csrfToken); return data; })
+      .finally(() => { sessionRequest = null; });
+    return sessionRequest;
+  },
+
+  async logout() {
+    await apiClient.post("/auth/logout/");
+    apiClient.setCsrfToken(null);
   },
 
   async fetchProfile(): Promise<User> {
@@ -15,8 +30,6 @@ export const authService = {
   changePassword: (payload: PasswordChangePayload) =>
     apiClient.post<{ detail: string }>("/auth/change-password/", payload),
 
-  getAccessToken: () => apiClient.getAccessToken(),
-  clearTokens: () => apiClient.clearTokens(),
 };
 
 export const healthService = {

@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from rest_framework_simplejwt.exceptions import AuthenticationFailed
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.exceptions import AuthenticationFailed
 
 from apps.accounts.auth import account_is_allowed
 from apps.accounts.models import User
@@ -92,17 +91,16 @@ class LoginSerializer(serializers.Serializer):
                 .first()
             )
 
+        # Match password hashing cost for unknown accounts.
+        if user is None:
+            User().set_password(password)
         if not user or not user.check_password(password) or not account_is_allowed(user):
             raise AuthenticationFailed(
                 self.default_error_messages["no_active_account"],
                 code="no_active_account",
             )
 
-        refresh = RefreshToken.for_user(user)
-        return {
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-        }
+        return {"user": user}
 
 
 class StudentPasswordChangeSerializer(serializers.Serializer):
@@ -203,4 +201,8 @@ class OfficialActivateSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs["password"] != attrs["password_confirm"]:
             raise serializers.ValidationError({"password_confirm": "Passwords do not match."})
+        try:
+            attrs["password"] = validate_account_password(attrs["password"])
+        except ValueError as exc:
+            raise serializers.ValidationError({"password": str(exc)}) from exc
         return attrs

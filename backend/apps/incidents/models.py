@@ -14,6 +14,11 @@ class IncidentRevisionStatus(models.TextChoices):
     REJECTED = "REJECTED", "Rejected"
 
 
+class IncidentNumberSequence(models.Model):
+    year = models.PositiveIntegerField(primary_key=True)
+    value = models.PositiveIntegerField(default=0)
+
+
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
     slug = models.SlugField(max_length=100, unique=True)

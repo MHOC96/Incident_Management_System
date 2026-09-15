@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useIncidentQueue } from "@/hooks/useIncidentQueue";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   DeanReviewQueueTabs,
-  pickDefaultDeanView,
   type DeanQueueView,
 } from "@/components/dean/DeanReviewQueueTabs";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentTable, type IncidentTableRow } from "@/components/dashboard/IncidentTable";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { formatAssignedOfficialLabel } from "@/lib/format";
-import { deanIncidentService } from "@/services/deanIncidents";
 import type { DeanIncident } from "@/types";
 
 function toDeanRow(incident: DeanIncident, view: DeanQueueView): IncidentTableRow {
@@ -30,48 +29,10 @@ function toDeanRow(incident: DeanIncident, view: DeanQueueView): IncidentTableRo
   };
 }
 
+const QUEUES: Record<DeanQueueView, string> = {"assignment":"/incidents/awaiting-action/","underway":"/incidents/currently-underway/","completed":"/incidents/dean-completed/"};
+
 function DeanDashboardContent() {
-  const [datasets, setDatasets] = useState<Record<DeanQueueView, DeanIncident[]>>({
-    underway: [],
-    assignment: [],
-    completed: [],
-  });
-  const [activeView, setActiveView] = useState<DeanQueueView>("assignment");
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    void (async () => {
-      const results = await Promise.allSettled([
-        deanIncidentService.listCurrentlyUnderway(),
-        deanIncidentService.listAwaitingAction(),
-        deanIncidentService.listCompleted(),
-      ]);
-      const nextDatasets = {
-        underway: results[0].status === "fulfilled" ? results[0].value.results : [],
-        assignment: results[1].status === "fulfilled" ? results[1].value.results : [],
-        completed: results[2].status === "fulfilled" ? results[2].value.results : [],
-      };
-      setDatasets(nextDatasets);
-      setActiveView(
-        pickDefaultDeanView({
-          underway: nextDatasets.underway.length,
-          assignment: nextDatasets.assignment.length,
-          completed: nextDatasets.completed.length,
-        }),
-      );
-      if (results.some((result) => result.status === "rejected")) {
-        setError("Some incident lists could not be loaded. Refresh the page to try again.");
-      }
-      setIsLoading(false);
-    })();
-  }, []);
-
-  const counts: Record<DeanQueueView, number> = {
-    underway: datasets.underway.length,
-    assignment: datasets.assignment.length,
-    completed: datasets.completed.length,
-  };
+  const { activeView, setActiveView, counts, items, isLoading, error, page, count, setPage } = useIncidentQueue<DeanQueueView, DeanIncident>(QUEUES, "assignment");
 
   const copy: Record<DeanQueueView, { title: string; empty: string; description: string }> = {
     underway: {
@@ -92,7 +53,7 @@ function DeanDashboardContent() {
     },
   };
 
-  const rows = datasets[activeView].map((incident) => toDeanRow(incident, activeView));
+  const rows = items.map((incident) => toDeanRow(incident, activeView));
 
   return (
     <PageContainer width="app">
@@ -129,6 +90,7 @@ function DeanDashboardContent() {
                 emptyDescription={copy[activeView].description}
                 dateLabel={activeView === "completed" ? "Closed" : "Updated"}
               />
+              <Pagination page={page} count={count} onChange={setPage} />
             </div>
           </>
         )}

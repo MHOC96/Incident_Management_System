@@ -206,9 +206,10 @@ function DeanIncidentDetailContent() {
 }
 
 export default function DeanIncidentDetailPage() {
+  const params = useParams<{ id: string }>();
   return (
     <RequireAuth allowedRoles={["DEAN"]}>
-      <DeanIncidentDetailContent />
+      <DeanIncidentDetailContent key={params.id} />
     </RequireAuth>
   );
 }

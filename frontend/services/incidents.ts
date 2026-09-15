@@ -13,6 +13,7 @@ import type {
 } from "@/types";
 
 export type PublicIncidentQuery = {
+  page?: string;
   q?: string;
   category?: string;
   location?: string;
@@ -30,16 +31,17 @@ function buildPublicQuery(params: PublicIncidentQuery = {}) {
 }
 
 export const incidentService = {
-  listPublic: (params?: PublicIncidentQuery) =>
+  listPublic: (params?: PublicIncidentQuery, signal?: AbortSignal) =>
     apiClient.get<PaginatedResponse<PublicIncident>>(
       `/incidents/public/${buildPublicQuery(params)}`,
+      { signal },
     ),
 
   getPublic: (id: number) =>
     apiClient.get<PublicIncident>(`/incidents/${id}/public/`),
 
-  toggleVote: (id: number) =>
-    apiClient.post<IncidentVoteResult>(`/incidents/${id}/vote/`),
+  toggleVote: (id: number, upvoted: boolean) =>
+    apiClient.post<IncidentVoteResult>(`/incidents/${id}/vote/`, { upvoted }),
 
   listMine: () => apiClient.get<PaginatedResponse<IncidentDetail>>("/incidents/"),
 

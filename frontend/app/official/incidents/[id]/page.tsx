@@ -196,9 +196,10 @@ function OfficialIncidentDetailContent() {
 }
 
 export default function OfficialIncidentDetailPage() {
+  const params = useParams<{ id: string }>();
   return (
     <RequireAuth allowedRoles={["OFFICIAL"]}>
-      <OfficialIncidentDetailContent />
+      <OfficialIncidentDetailContent key={params.id} />
     </RequireAuth>
   );
 }

@@ -3,6 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.assignments.models import Assignment
+from apps.incidents.models import Incident
 from apps.common.choices import AccountStatus, IncidentStatus, NotificationType, UserRole
 from apps.incidents.services import (
     InvalidStatusTransitionError,
@@ -25,6 +26,9 @@ def assign_incident(
     comment="",
     priority=None,
 ):
+    # Serialize assignment changes even when this service is called outside the API.
+    locked = Incident.objects.select_for_update().get(pk=incident.pk)
+    incident.status = locked.status
     if assigned_official.role != UserRole.OFFICIAL:
         raise ValueError("Assigned user must be an official.")
     if assigned_official.status != AccountStatus.ACTIVE:

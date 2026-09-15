@@ -300,9 +300,10 @@ function AdminIncidentReviewContent() {
 }
 
 export default function AdminIncidentReviewPage() {
+  const params = useParams<{ id: string }>();
   return (
     <RequireAuth allowedRoles={["ADMIN"]}>
-      <AdminIncidentReviewContent />
+      <AdminIncidentReviewContent key={params.id} />
     </RequireAuth>
   );
 }
