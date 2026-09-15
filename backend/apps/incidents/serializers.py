@@ -241,7 +241,7 @@ class IncidentDeanDetailSerializer(IncidentAdminReviewSerializer):
 
 
 class IncidentResolveSerializer(serializers.Serializer):
-    comment = serializers.CharField(required=True, min_length=5)
+    comment = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class IncidentOfficialDetailSerializer(IncidentDetailSerializer):
@@ -396,6 +396,11 @@ class AssignmentSerializer(serializers.ModelSerializer):
         source="assigned_official.name",
         read_only=True,
     )
+    assigned_official_position = serializers.CharField(
+        source="assigned_official.position",
+        read_only=True,
+        allow_null=True,
+    )
     assigned_by_name = serializers.CharField(source="assigned_by.name", read_only=True)
 
     class Meta:
@@ -405,6 +410,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
             "incident",
             "assigned_official",
             "assigned_official_name",
+            "assigned_official_position",
             "assigned_by",
             "assigned_by_name",
             "responsible_party",

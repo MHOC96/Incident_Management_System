@@ -10,10 +10,10 @@ import {
 } from "@/components/incidents/IncidentPageState";
 import { IncidentStatusBadge } from "@/components/incidents/IncidentStatusBadge";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
-import { IncidentWorkflowNotes } from "@/components/incidents/IncidentWorkflowNotes";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StudentIncidentEditPanel } from "@/components/student/StudentIncidentEditPanel";
 import {
+  formatAssignedOfficialLabel,
   formatDate,
   formatLocationPlace,
   getVisibilityLabel,
@@ -157,7 +157,7 @@ function StudentIncidentDetailContent() {
                     <div className="min-w-0">
                       <dt className="text-text-muted">Assigned to</dt>
                       <dd className="font-medium text-foreground">
-                        {incident.current_assignment.assigned_official_name}
+                        {formatAssignedOfficialLabel(incident.current_assignment)}
                       </dd>
                     </div>
                   ) : null}
@@ -186,27 +186,16 @@ function StudentIncidentDetailContent() {
           </aside>
         </div>
 
-        {/* Extras — admin notes, workflow updates, revisions */}
-        {incident.admin_review_note ||
-        incident.progress_note ||
-        incident.resolution_statement ||
-        incident.closure_note ||
-        incident.reopen_reason ? (
-          <div className="mt-3 flex flex-col gap-3">
-            {incident.admin_review_note ? (
-              <div className="student-detail-card p-3 md:p-4">
-                <h2 className="text-base font-semibold">
-                  {incident.status === "REJECTED"
-                    ? "Why this report was rejected"
-                    : "Admin review note"}
-                </h2>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
-                  {incident.admin_review_note}
-                </p>
-              </div>
-            ) : null}
-
-            <IncidentWorkflowNotes incident={incident} />
+        {incident.admin_review_note ? (
+          <div className="mt-3 student-detail-card p-3 md:p-4">
+            <h2 className="text-base font-semibold">
+              {incident.status === "REJECTED"
+                ? "Why this report was rejected"
+                : "Admin review note"}
+            </h2>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
+              {incident.admin_review_note}
+            </p>
           </div>
         ) : null}
       </section>

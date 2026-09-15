@@ -115,7 +115,7 @@ class OfficialFlowTests(TestCase):
             ).exists()
         )
 
-    def test_resolve_requires_comment(self):
+    def test_resolve_allows_empty_comment(self):
         self.incident.status = IncidentStatus.IN_PROGRESS
         self.incident.save(update_fields=["status", "updated_at"])
         response = self.client.post(
@@ -123,7 +123,10 @@ class OfficialFlowTests(TestCase):
             {},
             format="json",
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        self.incident.refresh_from_db()
+        self.assertEqual(self.incident.status, IncidentStatus.RESOLVED)
+        self.assertEqual(self.incident.resolution_statement, "")
 
     def test_assigned_list_returns_only_official_incidents(self):
         other_incident = Incident.objects.create(
@@ -411,6 +414,39 @@ class DeanOversightTests(TestCase):
         self.client.force_authenticate(user=self.student)
         response = self.client.get("/api/incidents/currently-underway/")
         self.assertEqual(response.status_code, 403)
+
+    def test_dean_currently_underway_includes_resolved(self):
+        resolved = Incident.objects.create(
+            incident_number="INC-2026-00043",
+            title="Awaiting dean closure",
+            description="Official marked this resolved",
+            category=self.awaiting.category,
+            location=self.awaiting.location,
+            reporter=self.student,
+            status=IncidentStatus.RESOLVED,
+        )
+        self.client.force_authenticate(user=self.dean)
+        response = self.client.get("/api/incidents/currently-underway/")
+        self.assertEqual(response.status_code, 200)
+        ids = {item["id"] for item in response.json()["results"]}
+        self.assertIn(resolved.id, ids)
+
+    def test_dean_completed_lists_closed_incidents(self):
+        closed = Incident.objects.create(
+            incident_number="INC-2026-00044",
+            title="Closed case",
+            description="Dean closed this incident",
+            category=self.awaiting.category,
+            location=self.awaiting.location,
+            reporter=self.student,
+            status=IncidentStatus.CLOSED,
+        )
+        self.client.force_authenticate(user=self.dean)
+        response = self.client.get("/api/incidents/dean-completed/")
+        self.assertEqual(response.status_code, 200)
+        ids = {item["id"] for item in response.json()["results"]}
+        self.assertIn(closed.id, ids)
+        self.assertNotIn(self.in_progress.id, ids)
 
 
 class IncidentVoteTests(TestCase):

@@ -171,6 +171,7 @@ export type Assignment = {
   incident: number;
   assigned_official: number;
   assigned_official_name: string;
+  assigned_official_position: OfficialPosition | "" | null;
   assigned_by: number;
   assigned_by_name: string;
   responsible_party: number | null;

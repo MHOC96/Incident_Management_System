@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { getDashboardLabel } from "@/lib/format";
 import { getDashboardRoute } from "@/lib/routes";
 
 export function WorkspaceNavigation() {
@@ -10,7 +11,7 @@ export function WorkspaceNavigation() {
   const pathname = usePathname();
   if (!user) return null;
   const items = [
-    { href: getDashboardRoute(user.role), label: user.role === "STUDENT" ? "My reports" : user.role === "OFFICIAL" ? "Assigned incidents" : user.role === "ADMIN" ? "Incident review" : "Overview" },
+    { href: getDashboardRoute(user.role), label: getDashboardLabel(user.role) },
     ...(user.role === "STUDENT"
       ? [
           { href: "/student/incidents/new", label: "Report an incident" },

@@ -16,7 +16,6 @@ import { IncidentPriorityBadge } from "@/components/incidents/IncidentPriorityBa
 import { IncidentRevisionPanel } from "@/components/incidents/IncidentRevisionPanel";
 import { IncidentStatusBadge } from "@/components/incidents/IncidentStatusBadge";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
-import { IncidentWorkflowNotes } from "@/components/incidents/IncidentWorkflowNotes";
 import { PageContainer } from "@/components/layout/PageContainer";
 import {
   formatDate,
@@ -216,23 +215,12 @@ function AdminIncidentFullBody({
         </aside>
       </div>
 
-      {!pending &&
-      (incident.admin_review_note ||
-        incident.progress_note ||
-        incident.resolution_statement ||
-        incident.closure_note ||
-        incident.reopen_reason) ? (
-        <div className="mt-3 flex flex-col gap-3">
-          {incident.admin_review_note ? (
-            <div className="student-detail-card p-3 md:p-4">
-              <h2 className="text-base font-semibold">Admin review note</h2>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
-                {incident.admin_review_note}
-              </p>
-            </div>
-          ) : null}
-
-          <IncidentWorkflowNotes incident={incident} />
+      {!pending && incident.admin_review_note ? (
+        <div className="mt-3 student-detail-card p-3 md:p-4">
+          <h2 className="text-base font-semibold">Admin review note</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
+            {incident.admin_review_note}
+          </p>
         </div>
       ) : null}
     </>

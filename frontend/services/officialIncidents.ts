@@ -9,8 +9,11 @@ import type {
 export const officialIncidentService = {
   getStats: () => apiClient.get<OfficialStats>("/incidents/official-stats/"),
 
-  listAssigned: () =>
+  listActiveAssignments: () =>
     apiClient.get<PaginatedResponse<OfficialIncident>>("/incidents/assigned/"),
+
+  listCompleted: () =>
+    apiClient.get<PaginatedResponse<OfficialIncident>>("/incidents/completed/"),
 
   getById: (id: number) => apiClient.get<OfficialIncident>(`/incidents/${id}/`),
 
@@ -19,7 +22,7 @@ export const officialIncidentService = {
       comment: comment ?? "",
     }),
 
-  resolve: (id: number, comment: string) =>
+  resolve: (id: number, comment = "") =>
     apiClient.post<OfficialIncident>(`/incidents/${id}/resolve/`, { comment }),
 };
 

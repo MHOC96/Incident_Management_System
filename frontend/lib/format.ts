@@ -143,8 +143,36 @@ const positionLabels: Record<OfficialPosition, string> = {
   OTHER: "Other",
 };
 
-export function getPositionLabel(position: OfficialPosition): string {
-  return positionLabels[position];
+export function getPositionLabel(position: OfficialPosition | string | null | undefined): string {
+  if (!position) {
+    return "Position not set";
+  }
+  if (position in positionLabels) {
+    return positionLabels[position as OfficialPosition];
+  }
+  return String(position).replace(/_/g, " ");
+}
+
+/** Dean assignment dropdown: full name and role title. */
+export function formatOfficialAssignOption(official: {
+  name: string;
+  position: OfficialPosition | string | null | undefined;
+}): string {
+  const name = official.name.trim() || "Unnamed official";
+  return `${name} — ${getPositionLabel(official.position)}`;
+}
+
+/** Assigned official on incident detail, timeline, and queues. */
+export function formatAssignedOfficialLabel(assignment: {
+  assigned_official_name: string;
+  assigned_official_position?: OfficialPosition | string | null;
+}): string {
+  const name = assignment.assigned_official_name.trim() || "Official";
+  const position = assignment.assigned_official_position;
+  if (!position) {
+    return name;
+  }
+  return `${name} — ${getPositionLabel(position)}`;
 }
 
 const accountStatusLabels: Record<AccountStatus, string> = {
@@ -172,7 +200,7 @@ export function getAccountStatusClassName(status: AccountStatus): string {
 const dashboardLabels: Record<UserRole, string> = {
   STUDENT: "My reports",
   ADMIN: "Review queue",
-  DEAN: "Faculty management",
+  DEAN: "Overview",
   OFFICIAL: "Assigned work",
 };
 

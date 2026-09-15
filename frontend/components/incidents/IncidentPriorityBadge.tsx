@@ -7,7 +7,7 @@ type IncidentPriorityBadgeProps = {
 
 export function IncidentPriorityBadge({ priority }: IncidentPriorityBadgeProps) {
   if (!priority) {
-    return <span className="text-sm text-text-muted">Priority not set</span>;
+    return <span className="text-sm text-text-muted">Not set</span>;
   }
 
   return (

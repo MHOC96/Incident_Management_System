@@ -40,9 +40,7 @@ export function getDeanStatusSummary(
     case "FORWARDED_TO_DEAN":
       return "This report is waiting for you to assign a responsible official.";
     case "ASSIGNED":
-      return official
-        ? `Assigned to ${official}. Work has not started yet.`
-        : "A responsible official has been assigned. Work has not started yet.";
+      return "";
     case "IN_PROGRESS":
       return official
         ? `${official} is currently working on this report.`

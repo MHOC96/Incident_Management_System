@@ -17,10 +17,8 @@ export const deanIncidentService = {
   listCurrentlyUnderway: () =>
     apiClient.get<PaginatedResponse<DeanIncident>>("/incidents/currently-underway/"),
 
-  listResolvedAwaitingClosure: () =>
-    apiClient.get<PaginatedResponse<DeanIncident>>(
-      "/incidents/resolved-awaiting-closure/",
-    ),
+  listCompleted: () =>
+    apiClient.get<PaginatedResponse<DeanIncident>>("/incidents/dean-completed/"),
 
   getById: (id: number) => apiClient.get<DeanIncident>(`/incidents/${id}/`),
 

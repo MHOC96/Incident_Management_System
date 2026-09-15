@@ -1,26 +1,25 @@
 "use client";
 
-export type DeanQueueView = "underway" | "assignment" | "completed";
+export type OfficialQueueView = "active" | "completed";
 
-const VIEWS: { value: DeanQueueView; label: string }[] = [
-  { value: "assignment", label: "Needs assignment" },
-  { value: "underway", label: "Currently underway" },
+const VIEWS: { value: OfficialQueueView; label: string }[] = [
+  { value: "active", label: "Active assignments" },
   { value: "completed", label: "Completed" },
 ];
 
-type DeanReviewQueueTabsProps = {
-  activeView: DeanQueueView;
-  counts: Record<DeanQueueView, number>;
-  onChange: (view: DeanQueueView) => void;
+type OfficialReviewQueueTabsProps = {
+  activeView: OfficialQueueView;
+  counts: Record<OfficialQueueView, number>;
+  onChange: (view: OfficialQueueView) => void;
 };
 
-export function DeanReviewQueueTabs({
+export function OfficialReviewQueueTabs({
   activeView,
   counts,
   onChange,
-}: DeanReviewQueueTabsProps) {
+}: OfficialReviewQueueTabsProps) {
   return (
-    <div className="admin-review-tabs" role="tablist" aria-label="Dean incident queues">
+    <div className="admin-review-tabs" role="tablist" aria-label="Official incident queues">
       {VIEWS.map((view) => {
         const count = counts[view.value];
         const isActive = activeView === view.value;
@@ -47,7 +46,14 @@ export function DeanReviewQueueTabs({
   );
 }
 
-export function pickDefaultDeanView(counts: Record<DeanQueueView, number>): DeanQueueView {
-  const order: DeanQueueView[] = ["assignment", "underway", "completed"];
-  return order.find((view) => counts[view] > 0) ?? "assignment";
+export function pickDefaultOfficialView(
+  counts: Record<OfficialQueueView, number>,
+): OfficialQueueView {
+  if (counts.active > 0) {
+    return "active";
+  }
+  if (counts.completed > 0) {
+    return "completed";
+  }
+  return "active";
 }

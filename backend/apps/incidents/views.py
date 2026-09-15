@@ -152,11 +152,11 @@ class IncidentViewSet(viewsets.ModelViewSet):
             "dean_stats",
             "awaiting_action",
             "currently_underway",
-            "resolved_awaiting_closure",
+            "dean_completed",
             "reopen",
         }:
             return [IsDean()]
-        if self.action in {"assigned", "official_stats"}:
+        if self.action in {"assigned", "official_completed", "official_stats"}:
             return [IsOfficial()]
         if self.action in {"start_progress", "resolve"}:
             return [IsOfficial()]
@@ -259,10 +259,25 @@ class IncidentViewSet(viewsets.ModelViewSet):
                 status__in={
                     IncidentStatus.ASSIGNED,
                     IncidentStatus.IN_PROGRESS,
-                    IncidentStatus.RESOLVED,
                 }
             )
             .order_by("-priority", "-updated_at")
+        )
+        page = self.paginate_queryset(queryset)
+        serializer = IncidentOfficialDetailSerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="completed")
+    def official_completed(self, request):
+        queryset = (
+            self.get_queryset()
+            .filter(
+                status__in={
+                    IncidentStatus.RESOLVED,
+                    IncidentStatus.CLOSED,
+                }
+            )
+            .order_by("-updated_at")
         )
         page = self.paginate_queryset(queryset)
         serializer = IncidentOfficialDetailSerializer(page, many=True)
@@ -307,6 +322,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
                 status__in={
                     IncidentStatus.ASSIGNED,
                     IncidentStatus.IN_PROGRESS,
+                    IncidentStatus.RESOLVED,
                 }
             )
             .order_by("-priority", "-updated_at")
@@ -315,12 +331,12 @@ class IncidentViewSet(viewsets.ModelViewSet):
         serializer = IncidentDeanDetailSerializer(page, many=True)
         return self.get_paginated_response(serializer.data)
 
-    @action(detail=False, methods=["get"], url_path="resolved-awaiting-closure")
-    def resolved_awaiting_closure(self, request):
+    @action(detail=False, methods=["get"], url_path="dean-completed")
+    def dean_completed(self, request):
         queryset = (
             self.get_queryset()
-            .filter(status=IncidentStatus.RESOLVED)
-            .order_by("-updated_at")
+            .filter(status=IncidentStatus.CLOSED)
+            .order_by("-closed_at", "-updated_at")
         )
         page = self.paginate_queryset(queryset)
         serializer = IncidentDeanDetailSerializer(page, many=True)

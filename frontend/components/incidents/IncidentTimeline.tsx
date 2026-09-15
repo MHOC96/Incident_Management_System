@@ -1,4 +1,4 @@
-import { formatDateTimeColombo } from "@/lib/format";
+import { formatAssignedOfficialLabel, formatDateTimeColombo } from "@/lib/format";
 import type { Assignment, IncidentStatus, PublicIncident } from "@/types";
 
 export type TimelineEvent = {
@@ -54,7 +54,7 @@ export function buildTimelineEvents(
         id: "assigned",
         label: "Assigned for resolution",
         at: incident.current_assignment.assigned_at,
-        detail: incident.current_assignment.assigned_official_name,
+        detail: formatAssignedOfficialLabel(incident.current_assignment),
       });
     }
 

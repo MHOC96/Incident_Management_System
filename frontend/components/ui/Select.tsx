@@ -36,6 +36,22 @@ type SelectProps = {
   "aria-label"?: string;
 };
 
+function labelFromReactNode(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return "";
+  }
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(labelFromReactNode).join("");
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return labelFromReactNode(node.props.children);
+  }
+  return "";
+}
+
 function optionsFromChildren(children: ReactNode): SelectOption[] {
   const options: SelectOption[] = [];
 
@@ -56,7 +72,7 @@ function optionsFromChildren(children: ReactNode): SelectOption[] {
 
     options.push({
       value: String(element.props.value ?? ""),
-      label: String(element.props.children ?? ""),
+      label: labelFromReactNode(element.props.children),
       disabled: element.props.disabled,
     });
   });
