@@ -6,12 +6,13 @@ Students, administrators, the Dean, and university officials each use role-speci
 
 ## Product walkthrough
 
-<video controls width="100%" src="usj-incident-walkthrough.mp4">
-  Your browser does not support HTML5 video.
-  <a href="usj-incident-walkthrough.mp4">Download the walkthrough video</a>.
-</video>
+[![Watch the incident management walkthrough](./usj-incident-walkthrough-preview.png)](./usj-incident-walkthrough.mp4)
 
-The full walkthrough source project under `videos/` stays local (gitignored). Re-export to `usj-incident-walkthrough.mp4` at the repo root when you update the demo.
+**[▶ Watch the walkthrough](./usj-incident-walkthrough.mp4)** — 55 seconds · 1080p · English neural narration with consistent pacing.
+
+Click the preview to open the video on GitHub. [Download the MP4](./usj-incident-walkthrough.mp4?raw=true).
+
+<!-- The editable source under videos/ is gitignored. Copy the latest natural-voice render to usj-incident-walkthrough.mp4 and refresh the preview image when updating this demo. -->
 
 ## Features
 
