@@ -4,6 +4,15 @@ A full-stack web application for the **University of Sri Jayewardenepura** (Facu
 
 Students, administrators, the Dean, and university officials each use role-specific workspaces. Public users can browse verified incidents without an account.
 
+## Product walkthrough
+
+<video controls width="100%" src="usj-incident-walkthrough.mp4">
+  Your browser does not support HTML5 video.
+  <a href="usj-incident-walkthrough.mp4">Download the walkthrough video</a>.
+</video>
+
+The full walkthrough source project under `videos/` stays local (gitignored). Re-export to `usj-incident-walkthrough.mp4` at the repo root when you update the demo.
+
 ## Features
 
 - **Incident lifecycle** — Submitted → review → verification → Dean assignment → official progress → resolution → closure
@@ -40,6 +49,7 @@ Django REST API (Railway)
 Incident_Management/
 ├── backend/          # Django API, models, tests, management commands
 ├── frontend/         # Next.js application
+├── usj-incident-walkthrough.mp4   # README demo video (committed)
 ├── AGENTS.md         # Engineering rules and security requirements
 ├── DESIGN.md         # UI and visual specification
 └── LICENSE           # MIT License

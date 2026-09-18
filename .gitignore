@@ -22,3 +22,7 @@ frontend/.next/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local tooling outputs (not part of the application)
+graphify-out/
+videos/
