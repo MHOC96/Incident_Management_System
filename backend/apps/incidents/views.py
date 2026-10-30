@@ -22,6 +22,7 @@ from apps.common.authorization import (
     user_can_modify_incident,
     user_can_reopen_incident,
     user_can_resolve_incident,
+    user_can_review_pending_revision,
     user_can_start_progress_incident,
     user_can_verify_incident,
 )
@@ -754,7 +755,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
     )
     def approve_changes(self, request, pk=None):
         incident = self.get_object()
-        if not user_can_admin_review_incident(request.user, incident):
+        if not user_can_review_pending_revision(request.user, incident):
             return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
         revision = self._get_pending_revision(incident)
         if not revision:
@@ -793,7 +794,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
     )
     def reject_changes(self, request, pk=None):
         incident = self.get_object()
-        if not user_can_admin_review_incident(request.user, incident):
+        if not user_can_review_pending_revision(request.user, incident):
             return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
         revision = self._get_pending_revision(incident)
         if not revision:

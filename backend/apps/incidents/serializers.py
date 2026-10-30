@@ -270,7 +270,7 @@ class IncidentManagementDetailSerializer(IncidentDeanDetailSerializer):
 
 
 class IncidentResolveSerializer(serializers.Serializer):
-    comment = serializers.CharField(required=False, allow_blank=True, default="")
+    comment = serializers.CharField(required=True, min_length=5)
 
 
 class IncidentOfficialDetailSerializer(IncidentDetailSerializer):

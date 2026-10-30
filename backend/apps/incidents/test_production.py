@@ -45,7 +45,7 @@ class ProductionRegressionTests(TestCase):
         image = IncidentImage.objects.create(incident=self.incident, cloudinary_public_id="test",
             cloudinary_url="https://res.cloudinary.com/example/image/authenticated/test.jpg")
         client = APIClient()
-        with patch("apps.incidents.media_views.image_delivery_url", return_value="https://example.com/signed"):
+        with patch("apps.incidents.media_views.media_delivery_url", return_value="https://example.com/signed"):
             self.assertEqual(client.get(f"/api/incident-images/{image.pk}/").status_code, 404)
             client.force_authenticate(self.student)
             self.assertEqual(client.get(f"/api/incident-images/{image.pk}/").status_code, 302)

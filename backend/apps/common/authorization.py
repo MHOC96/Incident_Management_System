@@ -60,6 +60,11 @@ def user_can_verify_incident(user, incident) -> bool:
     return user_can_admin_review_incident(user, incident)
 
 
+def user_can_review_pending_revision(user, incident) -> bool:
+    """Approve or reject reporter-proposed edits (any workflow status)."""
+    return bool(user and user.is_authenticated and user.role == UserRole.ADMIN)
+
+
 def user_can_assign_incident(user, incident) -> bool:
     return (
         user
