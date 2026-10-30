@@ -132,7 +132,7 @@ function DeanUsersContent() {
 
         <h1 className="mt-3 text-[26px] font-semibold md:text-[32px]">Invite an official</h1>
         <p className="mt-2 max-w-2xl text-sm text-text-secondary md:text-base">
-          Add a university official who can be assigned incidents. They will receive an email to
+          Add a relevant authority who can be assigned cases. They will receive an email to
           set their own password — you never need to share one.
         </p>
 
@@ -219,14 +219,14 @@ function DeanUsersContent() {
               <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm text-text-secondary">
                 <li>We create the account and send an activation email.</li>
                 <li>The official opens the link and chooses a password.</li>
-                <li>After activation, you can assign incidents to them from the dashboard.</li>
+                <li>After activation, you can assign cases to them from the dashboard.</li>
               </ol>
             </div>
             <div className="border border-border bg-surface px-4 py-4 text-sm text-text-secondary md:px-6">
               <p className="font-medium text-foreground">Managing access later</p>
               <p className="mt-2">
                 From the officials list you can deactivate or reactivate accounts. Historical
-                incident assignments stay on record.
+                case assignments stay on record.
               </p>
             </div>
           </aside>
@@ -238,7 +238,7 @@ function DeanUsersContent() {
   return (
     <section className="py-6 md:py-10">
       <Link
-        href="/dean/dashboard"
+        href="/management/dashboard"
         className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:text-primary-dark"
       >
         ← Back to overview
@@ -246,7 +246,7 @@ function DeanUsersContent() {
 
       <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-[26px] font-semibold md:text-[32px]">Official accounts</h1>
+          <h1 className="text-[26px] font-semibold md:text-[32px]">Authority accounts</h1>
           <p className="mt-1 text-sm text-text-secondary">
             {isLoading
               ? "Loading officials…"
@@ -283,8 +283,8 @@ function DeanUsersContent() {
           <div className="px-4 py-10 text-center md:px-6 md:py-14">
             <p className="font-medium text-foreground">No officials invited yet</p>
             <p className="mx-auto mt-2 max-w-md text-sm text-text-secondary">
-              Invite maintenance, security, or department officials so you can assign verified
-              incidents to them.
+              Invite maintenance, security, or department authorities so you can assign accepted
+              cases to them.
             </p>
             <Button type="button" className="mt-6 w-full sm:w-auto" onClick={openCreateView}>
               Invite your first official
@@ -377,7 +377,7 @@ function DeanUsersContent() {
 
 export default function DeanUsersPage() {
   return (
-    <RequireAuth allowedRoles={["DEAN"]}>
+    <RequireAuth allowedRoles={["MANAGEMENT", "SYSADMIN"]}>
       <PageContainer width="app">
         <DeanUsersContent />
       </PageContainer>

@@ -3,9 +3,11 @@ from django.db import models
 
 class UserRole(models.TextChoices):
     STUDENT = "STUDENT", "Student"
-    ADMIN = "ADMIN", "Admin"
-    DEAN = "DEAN", "Dean"
-    OFFICIAL = "OFFICIAL", "Official"
+    LECTURER = "LECTURER", "Lecturer"
+    ADMIN = "ADMIN", "Administrator"
+    AUTHORITY = "AUTHORITY", "Relevant Authority"
+    MANAGEMENT = "MANAGEMENT", "Faculty Management"
+    SYSADMIN = "SYSADMIN", "System Administrator"
 
 
 class OfficialPosition(models.TextChoices):
@@ -23,16 +25,32 @@ class AccountStatus(models.TextChoices):
     SUSPENDED = "SUSPENDED", "Suspended"
 
 
+class CaseType(models.TextChoices):
+    COMPLAINT = "COMPLAINT", "Complaint"
+    SUGGESTION = "SUGGESTION", "Suggestion"
+
+
+class ReporterPriority(models.TextChoices):
+    URGENT = "URGENT", "Urgent"
+    NORMAL = "NORMAL", "Normal"
+
+
+class IncidentMediaType(models.TextChoices):
+    IMAGE = "IMAGE", "Image"
+    VIDEO = "VIDEO", "Video"
+
+
 class IncidentStatus(models.TextChoices):
     SUBMITTED = "SUBMITTED", "Submitted"
     UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
-    VERIFIED = "VERIFIED", "Verified"
-    REJECTED = "REJECTED", "Rejected"
-    FORWARDED_TO_DEAN = "FORWARDED_TO_DEAN", "Forwarded to Dean"
+    NOT_STARTED = "NOT_STARTED", "Not Started"
     ASSIGNED = "ASSIGNED", "Assigned"
     IN_PROGRESS = "IN_PROGRESS", "In Progress"
-    RESOLVED = "RESOLVED", "Resolved"
+    WAITING_FOR_INFORMATION = "WAITING_FOR_INFORMATION", "Waiting for Information"
+    RESOLVED = "RESOLVED", "Solved"
     CLOSED = "CLOSED", "Closed"
+    REJECTED = "REJECTED", "Rejected"
+    REOPENED = "REOPENED", "Reopened"
 
 
 class IncidentVisibility(models.TextChoices):

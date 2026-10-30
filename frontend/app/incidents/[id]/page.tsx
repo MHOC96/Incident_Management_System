@@ -8,6 +8,7 @@ import { IncidentEvidence } from "@/components/incidents/IncidentEvidence";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { formatDate } from "@/lib/format";
+import { PUBLIC_NAV_LABEL } from "@/lib/terminology";
 import { incidentService } from "@/services/incidents";
 import type { PublicIncident } from "@/types";
 
@@ -29,12 +30,14 @@ function PublicIncidentDetailContent() {
         const data = await incidentService.getPublic(Number(params.id));
         if (!ignore) setIncident(data);
       } catch {
-        if (!ignore) setError("This incident could not be found or is not publicly visible.");
+        if (!ignore) setError("This case could not be found or is not publicly visible.");
       } finally {
         if (!ignore) setIsLoading(false);
       }
     })();
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
   }, [params.id]);
 
   return (
@@ -52,14 +55,14 @@ function PublicIncidentDetailContent() {
               href="/incidents"
               className="mt-4 inline-flex text-sm font-medium text-primary hover:text-primary-dark"
             >
-              Back to public incidents
+              Back to {PUBLIC_NAV_LABEL.toLowerCase()}
             </Link>
           </div>
         ) : (
           <>
             <IncidentDetailHeader
               backHref="/incidents"
-              backLabel="Back to public incidents"
+              backLabel={`Back to ${PUBLIC_NAV_LABEL.toLowerCase()}`}
               incidentNumber={incident.incident_number}
               showIncidentNumber={false}
               title={incident.title}
@@ -69,28 +72,29 @@ function PublicIncidentDetailContent() {
               category={incident.category}
               showPriority={false}
             />
-            <div className="public-detail-layout"><div className="public-incident-summary">
-              <div>
-                <h2 className="text-[18px] font-semibold mb-2">Description</h2>
-                <p className="break-words text-text-secondary whitespace-pre-wrap">
-                  {incident.description}
-                </p>
-                <p className="mt-4 text-sm text-text-muted">
-                  Reported on {formatDate(incident.created_at)}
-                </p>
-              </div>
-
-              {incident.images.length > 0 ? (
-                <div className="public-incident-photos">
-                  <h2 className="text-[18px] font-semibold mb-2">Incident photo</h2>
-                  <IncidentEvidence images={incident.images} title={incident.title} />
+            <div className="public-detail-layout">
+              <div className="public-incident-summary">
+                <div>
+                  <h2 className="mb-2 text-[18px] font-semibold">Description</h2>
+                  <p className="whitespace-pre-wrap break-words text-text-secondary">
+                    {incident.description}
+                  </p>
+                  <p className="mt-4 text-sm text-text-muted">
+                    Reported on {formatDate(incident.created_at)}
+                  </p>
                 </div>
-              ) : null}
-              </div><IncidentTimeline incident={incident} />
+
+                {incident.images.length > 0 ? (
+                  <div className="public-incident-photos">
+                    <h2 className="mb-2 text-[18px] font-semibold">Evidence</h2>
+                    <IncidentEvidence images={incident.images} title={incident.title} />
+                  </div>
+                ) : null}
+              </div>
+              <IncidentTimeline incident={incident} />
             </div>
           </>
         )}
-
       </section>
     </PageContainer>
   );

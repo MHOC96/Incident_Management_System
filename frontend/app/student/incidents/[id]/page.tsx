@@ -39,7 +39,7 @@ function StudentIncidentDetailContent() {
         }
       } catch {
         if (!ignore) {
-          setError("We couldn't load this incident.");
+          setError("We couldn't load this case.");
         }
       } finally {
         if (!ignore) {
@@ -68,7 +68,7 @@ function StudentIncidentDetailContent() {
     );
   }
 
-  const hasPhoto = incident.images.length > 0;
+  const hasEvidence = incident.images.length > 0;
   const locationPlace = formatLocationPlace(incident.location);
   const showProgressMeta = Boolean(
     incident.current_assignment ||
@@ -82,8 +82,16 @@ function StudentIncidentDetailContent() {
       <section className="student-incident-detail py-4 md:py-6">
         {/* Success banner */}
         {searchParams.get("submitted") ? (
-          <div className="mb-4 rounded-md border border-success/30 px-3 py-2.5 text-sm text-success">
-            Your report was submitted successfully. Staff will review it soon.
+          <div className="mb-4 space-y-2">
+            <div className="rounded-md border border-success/30 px-3 py-2.5 text-sm text-success">
+              Your report was submitted successfully. Staff will review it soon.
+            </div>
+            {searchParams.get("uploadFailed") ? (
+              <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm text-warning">
+                Evidence could not be uploaded. You can contact staff or submit a new report with
+                the file if needed.
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -125,9 +133,9 @@ function StudentIncidentDetailContent() {
               </p>
             </div>
 
-            {hasPhoto ? (
+            {hasEvidence ? (
               <div className="student-detail-card p-3 md:p-4">
-                <h2 className="mb-2 text-base font-semibold">Photo</h2>
+                <h2 className="mb-2 text-base font-semibold">Evidence</h2>
                 <IncidentEvidence images={incident.images} title={incident.title} compact />
               </div>
             ) : null}
@@ -206,7 +214,7 @@ function StudentIncidentDetailContent() {
 export default function StudentIncidentDetailPage() {
   const params = useParams<{ id: string }>();
   return (
-    <RequireAuth allowedRoles={["STUDENT"]}>
+    <RequireAuth allowedRoles={["STUDENT", "LECTURER"]}>
       <StudentIncidentDetailContent key={params.id} />
     </RequireAuth>
   );

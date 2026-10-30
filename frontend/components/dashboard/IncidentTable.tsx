@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { IncidentPriorityBadge } from "@/components/incidents/IncidentPriorityBadge";
+import { CasePriorityDisplay } from "@/components/incidents/CasePriorityDisplay";
 import { IncidentStatusBadge } from "@/components/incidents/IncidentStatusBadge";
 import { formatDate, formatLocationLabel } from "@/lib/format";
-import type { IncidentPriority, IncidentStatus, Location } from "@/types";
+import type { IncidentPriority, IncidentStatus, Location, ReporterPriority } from "@/types";
 
 export type IncidentTableRow = {
   id: number;
@@ -10,6 +10,7 @@ export type IncidentTableRow = {
   title: string;
   status: IncidentStatus;
   priority?: IncidentPriority | null;
+  reporterPriority?: ReporterPriority | null;
   location?: Location;
   href: string;
   date: string;
@@ -22,7 +23,13 @@ type IncidentTableProps = {
   rows: IncidentTableRow[];
   emptyTitle: string;
   emptyDescription: string;
+  isLoading?: boolean;
   showPriority?: boolean;
+  /** ADMIN: reporter urgency; other roles: administrator-assigned priority. */
+  urgencySource?: "reporter" | "official";
+  /** @deprecated Use urgencySource="official" */
+  officialPriorityOnly?: boolean;
+  priorityLabel?: string;
   dateLabel?: string;
   showReporter?: boolean;
   showCategory?: boolean;
@@ -34,18 +41,34 @@ export function IncidentTable({
   rows,
   emptyTitle,
   emptyDescription,
+  isLoading = false,
   showPriority = false,
+  urgencySource: urgencySourceProp,
+  officialPriorityOnly = false,
+  priorityLabel = "Priority",
   dateLabel = "Submitted",
   showReporter = false,
   showCategory = false,
   showAssigned = false,
   showIncidentNumber = true,
 }: IncidentTableProps) {
+  const urgencySource =
+    urgencySourceProp ?? (officialPriorityOnly ? "official" : "official");
   if (rows.length === 0) {
     return (
       <div className="px-4 py-8 md:px-6 md:py-10">
-        <p className="font-medium text-foreground">{emptyTitle}</p>
-        <p className="mt-1 text-sm text-text-secondary">{emptyDescription}</p>
+        {isLoading ? (
+          <div className="animate-pulse space-y-3" aria-busy="true" aria-label="Loading cases">
+            <div className="h-4 w-1/3 rounded-sm bg-border" />
+            <div className="h-6 w-2/3 rounded-sm bg-border" />
+            <div className="h-4 w-1/2 rounded-sm bg-border" />
+          </div>
+        ) : (
+          <>
+            <p className="font-medium text-foreground">{emptyTitle}</p>
+            <p className="mt-1 text-sm text-text-secondary">{emptyDescription}</p>
+          </>
+        )}
       </div>
     );
   }
@@ -81,7 +104,11 @@ export function IncidentTable({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <IncidentStatusBadge status={row.status} />
               {showPriority ? (
-                <IncidentPriorityBadge priority={row.priority ?? null} />
+                <CasePriorityDisplay
+                  officialPriority={row.priority}
+                  reporterPriority={row.reporterPriority}
+                  urgencySource={urgencySource}
+                />
               ) : null}
               <span className="text-xs text-text-muted">
                 {dateLabel}: {formatDate(row.date)}
@@ -104,7 +131,11 @@ export function IncidentTable({
               {showAssigned ? <th scope="col" className="px-4 py-3 font-medium">Assigned to</th> : null}
               <th scope="col" className="px-4 py-3 font-medium">Location</th>
               <th scope="col" className="px-4 py-3 font-medium">Status</th>
-              {showPriority ? <th scope="col" className="px-4 py-3 font-medium">Priority</th> : null}
+              {showPriority ? (
+                <th scope="col" className="px-4 py-3 font-medium">
+                  {priorityLabel}
+                </th>
+              ) : null}
               <th scope="col" className="px-4 py-3 font-medium">{dateLabel}</th>
             </tr>
           </thead>
@@ -141,7 +172,11 @@ export function IncidentTable({
                 </td>
                 {showPriority ? (
                   <td className="px-4 py-4">
-                    <IncidentPriorityBadge priority={row.priority ?? null} />
+                    <CasePriorityDisplay
+                      officialPriority={row.priority}
+                      reporterPriority={row.reporterPriority}
+                      urgencySource={urgencySource}
+                    />
                   </td>
                 ) : null}
                 <td className="px-4 py-4 text-text-muted">{formatDate(row.date)}</td>

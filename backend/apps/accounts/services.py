@@ -20,7 +20,7 @@ def create_official_invitation(*, dean, validated_data):
         password=secrets.token_urlsafe(32),
         name=validated_data["name"],
         phone=validated_data.get("phone", ""),
-        role=UserRole.OFFICIAL,
+        role=UserRole.AUTHORITY,
         position=validated_data["position"],
         status=AccountStatus.INVITED,
     )
@@ -64,7 +64,7 @@ def activate_official_account(*, token: str, password: str) -> User:
     try:
         user = User.objects.select_for_update().get(
             activation_token=token,
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
             status=AccountStatus.INVITED,
         )
     except User.DoesNotExist as exc:

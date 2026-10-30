@@ -13,14 +13,31 @@ class InvalidStatusTransitionError(Exception):
 ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
     IncidentStatus.SUBMITTED: {IncidentStatus.UNDER_REVIEW},
     IncidentStatus.UNDER_REVIEW: {
-        IncidentStatus.VERIFIED,
+        IncidentStatus.NOT_STARTED,
+        IncidentStatus.REJECTED,
+        IncidentStatus.WAITING_FOR_INFORMATION,
+    },
+    IncidentStatus.NOT_STARTED: {
+        IncidentStatus.ASSIGNED,
         IncidentStatus.REJECTED,
     },
-    IncidentStatus.VERIFIED: {IncidentStatus.FORWARDED_TO_DEAN},
-    IncidentStatus.FORWARDED_TO_DEAN: {IncidentStatus.ASSIGNED},
-    IncidentStatus.ASSIGNED: {IncidentStatus.IN_PROGRESS},
-    IncidentStatus.IN_PROGRESS: {IncidentStatus.RESOLVED},
-    IncidentStatus.RESOLVED: {IncidentStatus.CLOSED, IncidentStatus.IN_PROGRESS},
+    IncidentStatus.ASSIGNED: {
+        IncidentStatus.IN_PROGRESS,
+        IncidentStatus.NOT_STARTED,
+    },
+    IncidentStatus.IN_PROGRESS: {
+        IncidentStatus.WAITING_FOR_INFORMATION,
+        IncidentStatus.RESOLVED,
+    },
+    IncidentStatus.WAITING_FOR_INFORMATION: {
+        IncidentStatus.UNDER_REVIEW,
+        IncidentStatus.IN_PROGRESS,
+    },
+    IncidentStatus.RESOLVED: {
+        IncidentStatus.CLOSED,
+        IncidentStatus.REOPENED,
+    },
+    IncidentStatus.REOPENED: {IncidentStatus.IN_PROGRESS, IncidentStatus.ASSIGNED},
     IncidentStatus.REJECTED: set(),
     IncidentStatus.CLOSED: set(),
 }
@@ -56,17 +73,19 @@ def transition_incident(incident, new_status, *, verified_at=None, resolved_at=N
     return incident
 
 
-def admin_verify_and_forward(incident, *, verified_at):
+def admin_accept_case(incident, *, verified_at):
     if incident.status == IncidentStatus.SUBMITTED:
         transition_incident(incident, IncidentStatus.UNDER_REVIEW)
 
     if incident.status == IncidentStatus.UNDER_REVIEW:
-        transition_incident(incident, IncidentStatus.VERIFIED, verified_at=verified_at)
-
-    if incident.status == IncidentStatus.VERIFIED:
-        transition_incident(incident, IncidentStatus.FORWARDED_TO_DEAN)
+        transition_incident(incident, IncidentStatus.NOT_STARTED, verified_at=verified_at)
 
     return incident
+
+
+def admin_verify_and_forward(incident, *, verified_at):
+    """Backward-compatible name: accept case for assignment (NOT_STARTED)."""
+    return admin_accept_case(incident, verified_at=verified_at)
 
 
 def admin_reject_incident(incident):
@@ -83,14 +102,25 @@ def admin_request_more_information(incident):
     if incident.status == IncidentStatus.SUBMITTED:
         transition_incident(incident, IncidentStatus.UNDER_REVIEW)
 
+    if incident.status in {IncidentStatus.UNDER_REVIEW, IncidentStatus.IN_PROGRESS}:
+        transition_incident(incident, IncidentStatus.WAITING_FOR_INFORMATION)
+
     return incident
 
 
-def official_start_progress(incident):
+def authority_start_progress(incident):
     transition_incident(incident, IncidentStatus.IN_PROGRESS)
     return incident
 
 
-def official_resolve_incident(incident, *, resolved_at):
+def official_start_progress(incident):
+    return authority_start_progress(incident)
+
+
+def authority_resolve_incident(incident, *, resolved_at):
     transition_incident(incident, IncidentStatus.RESOLVED, resolved_at=resolved_at)
     return incident
+
+
+def official_resolve_incident(incident, *, resolved_at):
+    return authority_resolve_incident(incident, resolved_at=resolved_at)

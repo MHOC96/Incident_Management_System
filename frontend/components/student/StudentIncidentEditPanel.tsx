@@ -9,7 +9,13 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { formatApiError } from "@/lib/errors";
 import { incidentService, referenceService } from "@/services/incidents";
-import type { Category, IncidentVisibility, StudentIncident } from "@/types";
+import type {
+  CaseType,
+  Category,
+  IncidentVisibility,
+  ReporterPriority,
+  StudentIncident,
+} from "@/types";
 
 type Props = {
   incident: StudentIncident;
@@ -34,6 +40,8 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
     description: incident.description,
     category: String(incident.category.id),
     location_name: incident.location.name,
+    case_type: incident.case_type ?? ("COMPLAINT" as CaseType),
+    reporter_priority: incident.reporter_priority ?? ("NORMAL" as ReporterPriority),
     visibility: incident.visibility,
   });
 
@@ -55,6 +63,8 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
       description: incident.description,
       category: String(incident.category.id),
       location_name: incident.location.name,
+      case_type: incident.case_type ?? "COMPLAINT",
+      reporter_priority: incident.reporter_priority ?? "NORMAL",
       visibility: incident.visibility,
     });
     if (categories.length === 0) {
@@ -82,6 +92,8 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
         description: form.description.trim(),
         category: Number(form.category),
         location_name: form.location_name.trim(),
+        case_type: form.case_type,
+        reporter_priority: form.reporter_priority,
         visibility: form.visibility,
       });
       onUpdated(updated);
@@ -134,7 +146,7 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
       {/* Edit dialog */}
       <dialog
         ref={editRef}
-        aria-label="Edit incident report"
+        aria-label="Edit case report"
         className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-md border border-border bg-surface p-0 backdrop:bg-black/60"
         onClick={(event) => {
           if (event.target === event.currentTarget) editRef.current?.close();
@@ -171,7 +183,7 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
                   : "Approved reports keep their current details until an admin accepts your changes."}
               </p>
 
-              <FormField label="Incident title" htmlFor="edit-title" required>
+              <FormField label="Case title" htmlFor="edit-title" required>
                 <Input
                   id="edit-title"
                   value={form.title}
@@ -260,7 +272,7 @@ export function StudentIncidentEditPanel({ incident, onUpdated }: Props) {
       {/* Delete confirmation dialog */}
       <dialog
         ref={deleteRef}
-        aria-label="Delete incident report"
+        aria-label="Delete case report"
         className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-md border border-border bg-surface p-0 backdrop:bg-black/60"
         onClick={(event) => {
           if (event.target === event.currentTarget) deleteRef.current?.close();

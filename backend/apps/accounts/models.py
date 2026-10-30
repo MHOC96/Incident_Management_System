@@ -25,7 +25,7 @@ class UserManager(BaseUserManager):
         return self._create_user(email, password, **extra_fields)
 
     def create_superuser(self, email, password=None, **extra_fields):
-        extra_fields.setdefault("role", UserRole.DEAN)
+        extra_fields.setdefault("role", UserRole.SYSADMIN)
         extra_fields.setdefault("status", AccountStatus.ACTIVE)
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
@@ -92,12 +92,20 @@ class User(AbstractUser):
         return self.role == UserRole.ADMIN
 
     @property
+    def is_management(self):
+        return self.role == UserRole.MANAGEMENT
+
+    @property
+    def is_authority(self):
+        return self.role == UserRole.AUTHORITY
+
+    @property
     def is_dean(self):
-        return self.role == UserRole.DEAN
+        return self.is_management
 
     @property
     def is_official(self):
-        return self.role == UserRole.OFFICIAL
+        return self.is_authority
 
     @property
     def is_active_account(self):

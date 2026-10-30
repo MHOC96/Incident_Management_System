@@ -13,11 +13,34 @@ import type { IncidentDetail } from "@/types";
 
 const QUEUES = { mine: "/incidents/" };
 function StudentDashboardContent() {
-  const { items: incidents, isLoading, error, page, count, setPage } = useIncidentQueue<"mine", IncidentDetail>(QUEUES, "mine", false);
-  const [stats, setStats] = useState({ total: 0, underReview: 0, inProgress: 0, resolved: 0 });
+  const { items: incidents, isInitialLoading, error, page, count, setPage } =
+    useIncidentQueue<"mine", IncidentDetail>(QUEUES, "mine", false);
+  const [stats, setStats] = useState({ underReview: 0, inProgress: 0, resolved: 0 });
   useEffect(() => {
     const controller = new AbortController();
-    void apiClient.get<typeof stats>("/incidents/queue-counts/", { signal: controller.signal }).then(setStats).catch(() => {});
+    const load = () => {
+      void apiClient
+        .get<{ underReview: number; inProgress: number; resolved: number }>(
+          "/incidents/queue-counts/",
+          { signal: controller.signal },
+        )
+        .then((data) => {
+          setStats({
+            underReview: data.underReview,
+            inProgress: data.inProgress,
+            resolved: data.resolved,
+          });
+        })
+        .catch(() => {});
+    };
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(load, { timeout: 2000 });
+      return () => {
+        controller.abort();
+        cancelIdleCallback(id);
+      };
+    }
+    load();
     return () => controller.abort();
   }, []);
 
@@ -27,11 +50,11 @@ function StudentDashboardContent() {
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-[26px] font-semibold md:text-[32px]">My reports</h1>
           <LinkButton href="/student/incidents/new" className="w-full shrink-0 sm:w-auto">
-            Report an incident
+            Submit a complaint or suggestion
           </LinkButton>
         </div>
 
-        {isLoading ? (
+        {isInitialLoading ? (
           <div className="animate-pulse space-y-4">
             <div className="h-24 border border-border bg-surface" />
             <div className="h-40 border border-border bg-surface" />
@@ -42,7 +65,7 @@ function StudentDashboardContent() {
           <>
             <StatsStrip
               items={[
-                { value: stats.total, label: "Total reports" },
+                { value: count, label: "Total reports" },
                 { value: stats.underReview, label: "Under review" },
                 { value: stats.inProgress, label: "In progress" },
                 { value: stats.resolved, label: "Resolved" },
@@ -52,10 +75,10 @@ function StudentDashboardContent() {
             {incidents.length === 0 ? (
               <div className="border border-border bg-surface px-4 py-8 md:px-6 md:py-10">
                 <p className="text-text-secondary mb-4">
-                  You haven&apos;t reported any incidents yet.
+                  You haven&apos;t submitted any complaints or suggestions yet.
                 </p>
                 <LinkButton href="/student/incidents/new" className="w-full sm:w-auto">
-                  Report new incident
+                  Submit new case
                 </LinkButton>
               </div>
             ) : (
@@ -74,7 +97,7 @@ function StudentDashboardContent() {
                     href: `/student/incidents/${incident.id}`,
                     date: incident.created_at,
                   }))}
-                  emptyTitle="You haven't reported any incidents yet."
+                  emptyTitle="You haven't submitted any complaints or suggestions yet."
                   emptyDescription="Submit a report when you notice a problem on campus."
                   showIncidentNumber={false}
                 />
@@ -90,7 +113,7 @@ function StudentDashboardContent() {
 
 export default function StudentDashboardPage() {
   return (
-    <RequireAuth allowedRoles={["STUDENT"]}>
+    <RequireAuth allowedRoles={["STUDENT", "LECTURER"]}>
       <StudentDashboardContent />
     </RequireAuth>
   );

@@ -316,6 +316,40 @@ button:disabled { cursor: not-allowed; }
     column-gap: 16px;
   }
 }
+/* One maroon accent on the action card only (not header + card). */
+.workspace-container > section.authority-incident-detail > header.authority-detail-header {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.authority-incident-detail .authority-detail-layout {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: start;
+  grid-template-areas:
+    "summary"
+    "main"
+    "timeline";
+}
+.authority-incident-detail .authority-detail-summary {
+  grid-area: summary;
+}
+.authority-incident-detail .authority-detail-main {
+  grid-area: main;
+  min-width: 0;
+}
+.authority-incident-detail .authority-detail-timeline {
+  grid-area: timeline;
+}
+@media (min-width: 768px) {
+  .authority-incident-detail .authority-detail-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+    grid-template-areas:
+      "main summary"
+      "main timeline";
+    column-gap: 16px;
+  }
+}
 /* Centered modals — stay fully visible on mobile (top layer / dialog) */
 dialog.workspace-dialog {
   position: fixed;

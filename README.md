@@ -51,8 +51,7 @@ Incident_Management/
 ├── backend/          # Django API, models, tests, management commands
 ├── frontend/         # Next.js application
 ├── usj-incident-walkthrough.mp4   # README demo video (committed)
-├── AGENTS.md         # Engineering rules and security requirements
-├── DESIGN.md         # UI and visual specification
+├── AGENTS.md         # Engineering rules, security, permissions, UI standards
 └── LICENSE           # MIT License
 ```
 
@@ -112,17 +111,29 @@ python manage.py import_student_roster
 
 Existing student passwords are **not** overwritten on re-import; only new MC numbers are created.
 
-### Admin and Dean (controlled setup)
+### Staff roles (PDF / MVP)
+
+Roles: **Administrator** (`ADMIN`), **Faculty Management** (`MANAGEMENT`), **System Administrator** (`SYSADMIN`), **Relevant Authority** (`AUTHORITY`), **Lecturer** (`LECTURER`). Students use the roster import above.
+
+**Local demo (one account per staff role):**
+
+```bash
+cd backend
+python manage.py seed_fmsc_demo_accounts
+# Optional: python manage.py seed_fmsc_demo_accounts --reset
+```
+
+**Individual staff account:**
 
 ```bash
 python manage.py create_staff_user \
-  --email dean@example.com \
-  --name "Dean User" \
+  --email administrator@example.com \
+  --name "FMSC Administrator" \
   --password "secure-password" \
-  --role DEAN
+  --role ADMIN
 ```
 
-Use `--role ADMIN` for an administrator. Officials are created by the Dean through the application, not this command.
+`--role` must be one of: `ADMIN`, `MANAGEMENT`, `SYSADMIN`, `AUTHORITY`, `LECTURER`. Relevant authorities can also be provisioned by the System Administrator in the app (`/management/users`).
 
 ## Environment variables
 
@@ -154,8 +165,7 @@ Permission and workflow tests cover authentication, incidents, voting, and role 
 
 ## Documentation for contributors
 
-- **[AGENTS.md](./AGENTS.md)** — Architecture, roles, API rules, security, and definition of done
-- **[DESIGN.md](./DESIGN.md)** — Institutional UI specification (colors, layout, responsive behavior)
+- **[AGENTS.md](./AGENTS.md)** — Architecture, roles, API rules, security, UI standards, and definition of done
 
 Read both before making substantial changes.
 
@@ -165,6 +175,6 @@ This project is licensed under the [MIT License](./LICENSE).
 
 ## Authors
 
-Developed by [Oshadha Canchana](https://github.com/MHOC96) and [P.M.A Thevindu Nethmina Ariyathilaka](https://github.com/Thevindu23).
+Developed by [Oshadha Canchana](https://github.com/MHOC96), [P.M.A Thevindu Nethmina Ariyathilaka](https://github.com/Thevindu23), and [Mohamed Rifkhan](https://github.com/rifkancodes).
 
 Built for the University of Sri Jayewardenepura — Incident Reporting & Resolution Management System.

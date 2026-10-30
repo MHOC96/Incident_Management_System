@@ -1,34 +1,47 @@
 import type {
   AccountStatus,
+  CaseType,
   IncidentPriority,
   IncidentStatus,
   IncidentVisibility,
   OfficialPosition,
+  ReporterPriority,
   UserRole,
 } from "@/types";
 
+const caseTypeLabels: Record<CaseType, string> = {
+  COMPLAINT: "Complaint",
+  SUGGESTION: "Suggestion",
+};
+
+export function getCaseTypeLabel(caseType: CaseType): string {
+  return caseTypeLabels[caseType];
+}
+
 const statusLabels: Record<IncidentStatus, string> = {
   SUBMITTED: "Submitted",
-  UNDER_REVIEW: "Under Review",
-  VERIFIED: "Verified",
-  REJECTED: "Rejected",
-  FORWARDED_TO_DEAN: "Forwarded to Dean",
+  UNDER_REVIEW: "Under review",
+  NOT_STARTED: "Not started",
   ASSIGNED: "Assigned",
-  IN_PROGRESS: "In Progress",
-  RESOLVED: "Resolved",
+  IN_PROGRESS: "In progress",
+  WAITING_FOR_INFORMATION: "Waiting for information",
+  RESOLVED: "Solved",
   CLOSED: "Closed",
+  REJECTED: "Rejected",
+  REOPENED: "Reopened",
 };
 
 const statusStyles: Record<IncidentStatus, string> = {
   SUBMITTED: "text-text-secondary border-border",
   UNDER_REVIEW: "text-warning border-warning/30",
-  VERIFIED: "text-success border-success/30",
+  NOT_STARTED: "text-warning border-warning/30",
   REJECTED: "text-danger border-danger/30",
-  FORWARDED_TO_DEAN: "text-info border-info/30",
   ASSIGNED: "text-info border-info/30",
   IN_PROGRESS: "text-info border-info/30",
+  WAITING_FOR_INFORMATION: "text-warning border-warning/30",
   RESOLVED: "text-success border-success/30",
   CLOSED: "text-success border-success/30",
+  REOPENED: "text-info border-info/30",
 };
 
 export function getStatusLabel(status: IncidentStatus): string {
@@ -125,6 +138,24 @@ export function getPriorityClassName(priority: IncidentPriority): string {
   return priorityStyles[priority];
 }
 
+const reporterPriorityLabels: Record<ReporterPriority, string> = {
+  URGENT: "Urgent (reporter)",
+  NORMAL: "Normal (reporter)",
+};
+
+const reporterPriorityStyles: Record<ReporterPriority, string> = {
+  URGENT: "text-danger border-danger/30",
+  NORMAL: "text-text-secondary border-border",
+};
+
+export function getReporterPriorityLabel(priority: ReporterPriority): string {
+  return reporterPriorityLabels[priority];
+}
+
+export function getReporterPriorityClassName(priority: ReporterPriority): string {
+  return reporterPriorityStyles[priority];
+}
+
 const visibilityLabels: Record<IncidentVisibility, string> = {
   PUBLIC: "Public",
   PRIVATE: "Private",
@@ -199,9 +230,11 @@ export function getAccountStatusClassName(status: AccountStatus): string {
 
 const dashboardLabels: Record<UserRole, string> = {
   STUDENT: "My reports",
+  LECTURER: "My reports",
   ADMIN: "Review queue",
-  DEAN: "Overview",
-  OFFICIAL: "Assigned work",
+  MANAGEMENT: "Overview",
+  AUTHORITY: "Assigned work",
+  SYSADMIN: "Authority accounts",
 };
 
 export function getDashboardLabel(role: UserRole): string {

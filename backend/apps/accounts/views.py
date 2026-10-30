@@ -18,7 +18,13 @@ from apps.accounts.serializers import (
 )
 from apps.accounts.services import activate_official_account, create_official_invitation
 from apps.common.choices import UserRole
-from apps.common.permissions import IsActiveUser, IsDean, IsStudent
+from apps.common.permissions import (
+    IsActiveUser,
+    IsAdminManagementOrSysAdmin,
+    IsManagementOrSysAdmin,
+    IsReporter,
+    IsSysAdmin,
+)
 
 User = get_user_model()
 
@@ -68,7 +74,7 @@ class ProfileView(generics.RetrieveUpdateAPIView):
 
 
 class StudentPasswordChangeView(APIView):
-    permission_classes = [IsStudent]
+    permission_classes = [IsReporter]
     throttle_classes = [LoginThrottle]
 
     def post(self, request):
@@ -122,12 +128,16 @@ class LogoutView(APIView):
 
 
 class OfficialAccountViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsDean]
     http_method_names = ["get", "post", "patch", "head", "options"]
     pagination_class = None
 
+    def get_permissions(self):
+        if self.action in {"list", "retrieve", "head", "options"}:
+            return [IsAdminManagementOrSysAdmin()]
+        return [IsManagementOrSysAdmin()]
+
     def get_queryset(self):
-        return User.objects.filter(role=UserRole.OFFICIAL).order_by("name")
+        return User.objects.filter(role=UserRole.AUTHORITY).order_by("name")
 
     def get_serializer_class(self):
         if self.action == "create":

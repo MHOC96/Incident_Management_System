@@ -1,7 +1,8 @@
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Value, When
 from django.utils import timezone
 from rest_framework import generics, permissions, status, viewsets
+from rest_framework.permissions import AllowAny
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -25,8 +26,17 @@ from apps.common.authorization import (
     user_can_verify_incident,
 )
 from apps.common.choices import IncidentStatus, NotificationType, UserRole
-from apps.common.permissions import IsActiveUser, IsAdmin, IsDean, IsOfficial, IsStaffRole, IsStudent
-from apps.incidents.cloudinary_service import upload_incident_image
+from apps.common.permissions import (
+    IsActiveUser,
+    IsAdmin,
+    IsAdminOrManagement,
+    IsAuthority,
+    IsManagement,
+    IsReporter,
+    IsStaffRole,
+)
+from apps.incidents.cloudinary_service import upload_incident_media
+from apps.incidents.management_overview import build_management_overview
 from apps.incidents.models import (
     Category,
     Incident,
@@ -44,6 +54,7 @@ from apps.incidents.serializers import (
     IncidentAssignSerializer,
     IncidentCreateSerializer,
     IncidentDeanDetailSerializer,
+    IncidentManagementDetailSerializer,
     IncidentDetailSerializer,
     IncidentImageSerializer,
     IncidentOfficialDetailSerializer,
@@ -82,6 +93,100 @@ class IncidentCreateThrottle(UserRateThrottle):
     scope = "incident_create"
 
 
+def _public_filter_locations_queryset():
+    return Location.objects.filter(
+        is_active=True,
+        incidents__visibility="PUBLIC",
+        incidents__status__in=PUBLIC_VISIBLE_STATUSES,
+    ).distinct()
+
+
+def apply_public_list_filters(queryset, request):
+    stage = request.query_params.get("stage")
+    if stage == "forwarded":
+        queryset = queryset.filter(
+            status__in=[
+                IncidentStatus.NOT_STARTED,
+                IncidentStatus.ASSIGNED,
+            ],
+        )
+    elif stage == "in_progress":
+        queryset = queryset.filter(status=IncidentStatus.IN_PROGRESS)
+    elif stage == "completed":
+        queryset = queryset.filter(
+            status__in=[IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
+        )
+
+    search = request.query_params.get("q", "").strip()
+    if search:
+        queryset = queryset.filter(
+            Q(incident_number__icontains=search)
+            | Q(title__icontains=search)
+            | Q(category__name__icontains=search)
+            | Q(location__name__icontains=search),
+        )
+
+    category = request.query_params.get("category")
+    if category and category.isdigit():
+        queryset = queryset.filter(category_id=int(category))
+
+    location = request.query_params.get("location")
+    if location and location.isdigit():
+        queryset = queryset.filter(location_id=int(location))
+
+    ordering = request.query_params.get("ordering", "recent")
+    if ordering == "highest_votes":
+        queryset = queryset.order_by("-vote_count", "-created_at")
+    else:
+        queryset = queryset.order_by("-created_at")
+    return queryset
+
+
+def apply_staff_dashboard_filters(queryset, request):
+    """Optional filters for administrator/management queue listings."""
+    date_from = request.query_params.get("date_from", "").strip()
+    date_to = request.query_params.get("date_to", "").strip()
+    if date_from:
+        queryset = queryset.filter(created_at__date__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(created_at__date__lte=date_to)
+
+    category = request.query_params.get("category", "").strip()
+    if category.isdigit():
+        queryset = queryset.filter(category_id=int(category))
+
+    authority = request.query_params.get("authority", "").strip()
+    if authority.isdigit():
+        from apps.assignments.models import Assignment
+
+        queryset = queryset.filter(
+            pk__in=Assignment.objects.filter(
+                assigned_official_id=int(authority),
+                is_current=True,
+            ).values("incident_id")
+        )
+
+    priority = request.query_params.get("priority", "").strip()
+    if priority in {"LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+        queryset = queryset.filter(priority=priority)
+    elif priority == "NOT_SET":
+        queryset = queryset.filter(priority__isnull=True)
+    elif priority == "REPORTER_URGENT":
+        queryset = queryset.filter(reporter_priority="URGENT")
+    elif priority == "REPORTER_NORMAL":
+        queryset = queryset.filter(reporter_priority="NORMAL")
+
+    status = request.query_params.get("status", "").strip()
+    if status in IncidentStatus.values:
+        queryset = queryset.filter(status=status)
+
+    case_type = request.query_params.get("case_type", "").strip()
+    if case_type in {"COMPLAINT", "SUGGESTION"}:
+        queryset = queryset.filter(case_type=case_type)
+
+    return queryset
+
+
 class CategoryListView(generics.ListAPIView):
     queryset = Category.objects.filter(is_active=True)
     serializer_class = CategorySerializer
@@ -91,9 +196,7 @@ class CategoryListView(generics.ListAPIView):
 
 class LocationListView(generics.ListAPIView):
     # Free-text locations from private/unreviewed reports are not public reference data.
-    queryset = Location.objects.filter(
-        is_active=True, incidents__visibility="PUBLIC", incidents__status__in=PUBLIC_VISIBLE_STATUSES,
-    ).distinct()
+    queryset = _public_filter_locations_queryset()
     serializer_class = LocationSerializer
     permission_classes = [permissions.AllowAny]
     pagination_class = None
@@ -129,16 +232,34 @@ class IncidentViewSet(viewsets.ModelViewSet):
         if self.request.method not in {"GET", "HEAD", "OPTIONS"}:
             queryset = queryset.select_for_update(of=("self",))
 
-        if user.role in {UserRole.ADMIN, UserRole.DEAN}:
+        if user.role in {UserRole.ADMIN, UserRole.MANAGEMENT}:
             return queryset
 
-        if user.role == UserRole.OFFICIAL:
+        if user.role == UserRole.AUTHORITY:
             from apps.assignments.models import Assignment
             return queryset.filter(pk__in=Assignment.objects.filter(
                 assigned_official=user, is_current=True,
             ).values("incident_id"))
 
         return queryset.filter(reporter=user)
+
+    def _counts_queryset(self):
+        user = self.request.user
+        queryset = Incident.objects.all()
+        if user.role in {UserRole.ADMIN, UserRole.MANAGEMENT}:
+            return queryset
+        if user.role == UserRole.AUTHORITY:
+            from apps.assignments.models import Assignment
+
+            return queryset.filter(
+                pk__in=Assignment.objects.filter(
+                    assigned_official=user,
+                    is_current=True,
+                ).values("incident_id")
+            )
+        if user.role in {UserRole.STUDENT, UserRole.LECTURER}:
+            return queryset.filter(reporter=user)
+        return queryset.none()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -155,37 +276,47 @@ class IncidentViewSet(viewsets.ModelViewSet):
         return IncidentDetailSerializer
 
     def get_permissions(self):
-        if self.action in {"list_public", "retrieve_public"}:
-            return [permissions.AllowAny()]
+        if self.action in {"list_public", "list_public_register", "retrieve_public"}:
+            return [AllowAny()]
         if self.action in {"create", "destroy"}:
-            return [IsStudent()]
+            return [IsReporter()]
         if self.action == "toggle_vote":
-            return [IsStudent()]
+            return [IsReporter()]
         if self.action in {
             "pending_review", "pending_changes", "forwarded_reports", "rejected_reports", "review_stats"
         }:
             return [IsAdmin()]
+        if self.action in {"dean_stats", "management_overview"}:
+            return [IsManagement()]
         if self.action in {
-            "dean_stats",
-            "awaiting_action",
-            "currently_underway",
-            "dean_completed",
+            "verify",
+            "reject",
+            "assign",
+            "close",
+            "approve_changes",
+            "reject_changes",
             "reopen",
         }:
-            return [IsDean()]
+            return [IsAdmin()]
+        if self.action == "queue_counts":
+            return [IsActiveUser()]
+        if self.action in {"currently_underway", "dean_completed"}:
+            return [IsAdminOrManagement()]
+        if self.action == "awaiting_action":
+            return [IsAdminOrManagement()]
         if self.action in {"assigned", "official_completed", "official_stats"}:
-            return [IsOfficial()]
+            return [IsAuthority()]
         if self.action in {"start_progress", "resolve"}:
-            return [IsOfficial()]
+            return [IsAuthority()]
         return super().get_permissions()
 
     def retrieve(self, request, *args, **kwargs):
         incident = self.get_object()
         if request.user.role == UserRole.ADMIN:
             serializer = IncidentAdminReviewSerializer(incident)
-        elif request.user.role == UserRole.DEAN:
-            serializer = IncidentDeanDetailSerializer(incident)
-        elif request.user.role == UserRole.OFFICIAL:
+        elif request.user.role == UserRole.MANAGEMENT:
+            serializer = IncidentManagementDetailSerializer(incident)
+        elif request.user.role == UserRole.AUTHORITY:
             serializer = IncidentOfficialDetailSerializer(incident)
         elif request.user.role == UserRole.STUDENT:
             serializer = IncidentStudentDetailSerializer(incident)
@@ -195,7 +326,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         incident = self.get_object()
-        if request.user.role != UserRole.DEAN:
+        if request.user.role != UserRole.MANAGEMENT:
             return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = IncidentPriorityUpdateSerializer(
@@ -205,7 +336,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(IncidentDeanDetailSerializer(incident).data)
+        return Response(IncidentManagementDetailSerializer(incident).data)
 
     def destroy(self, request, *args, **kwargs):
         incident = self.get_object()
@@ -254,40 +385,106 @@ class IncidentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="queue-counts")
     def queue_counts(self, request):
+        pending_revision = IncidentRevision.objects.filter(
+            incident=OuterRef("pk"),
+            status=IncidentRevisionStatus.PENDING,
+        )
         filters = {
             UserRole.ADMIN: {
                 "review": Q(status__in=PENDING_REVIEW_STATUSES),
-                "changes": Q(revisions__status=IncidentRevisionStatus.PENDING),
-                "forwarded": Q(status__in=[IncidentStatus.FORWARDED_TO_DEAN, IncidentStatus.ASSIGNED,
-                    IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED, IncidentStatus.CLOSED]),
+                "changes": Q(Exists(pending_revision)),
+                "assignment": Q(
+                    status__in=[IncidentStatus.NOT_STARTED, IncidentStatus.REOPENED]
+                ),
+                "underway": Q(
+                    status__in={
+                        IncidentStatus.ASSIGNED,
+                        IncidentStatus.IN_PROGRESS,
+                        IncidentStatus.RESOLVED,
+                    }
+                ),
                 "rejected": Q(status=IncidentStatus.REJECTED),
+                "completed": Q(status=IncidentStatus.CLOSED),
             },
-            UserRole.DEAN: {
-                "assignment": Q(status=IncidentStatus.FORWARDED_TO_DEAN),
+            UserRole.MANAGEMENT: {
+                "assignment": Q(
+                    status__in=[IncidentStatus.NOT_STARTED, IncidentStatus.REOPENED]
+                ),
                 "underway": Q(status__in=[IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED]),
                 "completed": Q(status=IncidentStatus.CLOSED),
             },
-            UserRole.OFFICIAL: {
-                "active": Q(status__in=[IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS]),
+            UserRole.AUTHORITY: {
+                "active": Q(
+                    status__in={
+                        IncidentStatus.ASSIGNED,
+                        IncidentStatus.IN_PROGRESS,
+                        IncidentStatus.REOPENED,
+                    }
+                ),
                 "completed": Q(status__in=[IncidentStatus.RESOLVED, IncidentStatus.CLOSED]),
             },
             UserRole.STUDENT: {
-                "total": Q(), "underReview": Q(status__in=PENDING_REVIEW_STATUSES),
-                "inProgress": Q(status__in=[IncidentStatus.VERIFIED, IncidentStatus.FORWARDED_TO_DEAN,
-                    IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS]),
+                "total": Q(),
+                "underReview": Q(status__in=PENDING_REVIEW_STATUSES),
+                "inProgress": Q(
+                    status__in=[
+                        IncidentStatus.NOT_STARTED,
+                        IncidentStatus.ASSIGNED,
+                        IncidentStatus.IN_PROGRESS,
+                        IncidentStatus.REOPENED,
+                        IncidentStatus.WAITING_FOR_INFORMATION,
+                    ]
+                ),
                 "resolved": Q(status__in=[IncidentStatus.RESOLVED, IncidentStatus.CLOSED]),
             },
-        }[request.user.role]
-        return Response(self.get_queryset().aggregate(**{
-            key: Count("id", distinct=True, filter=condition) for key, condition in filters.items()
-        }))
+            UserRole.LECTURER: {
+                "total": Q(),
+                "underReview": Q(status__in=PENDING_REVIEW_STATUSES),
+                "inProgress": Q(
+                    status__in=[
+                        IncidentStatus.NOT_STARTED,
+                        IncidentStatus.ASSIGNED,
+                        IncidentStatus.IN_PROGRESS,
+                        IncidentStatus.REOPENED,
+                        IncidentStatus.WAITING_FOR_INFORMATION,
+                    ]
+                ),
+                "resolved": Q(status__in=[IncidentStatus.RESOLVED, IncidentStatus.CLOSED]),
+            },
+        }
+        role_filters = filters.get(request.user.role)
+        if role_filters is None:
+            return Response(
+                {"detail": "Queue counts are not available for this role."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        queryset = self._counts_queryset()
+        if request.user.role in {UserRole.ADMIN, UserRole.MANAGEMENT, UserRole.AUTHORITY}:
+            queryset = apply_staff_dashboard_filters(queryset, request)
+        return Response(
+            queryset.aggregate(
+                **{
+                    key: Count("id", distinct=True, filter=condition)
+                    for key, condition in role_filters.items()
+                }
+            )
+        )
 
     @action(detail=False, methods=["get"], url_path="official-stats")
     def official_stats(self, request):
         queryset = self.get_queryset()
         return Response(
             queryset.aggregate(
-                assigned=Count("id", distinct=True, filter=Q(status=IncidentStatus.ASSIGNED)),
+                assigned=Count(
+                    "id",
+                    distinct=True,
+                    filter=Q(
+                        status__in={
+                            IncidentStatus.ASSIGNED,
+                            IncidentStatus.REOPENED,
+                        }
+                    ),
+                ),
                 in_progress=Count(
                     "id",
                     distinct=True,
@@ -300,32 +497,31 @@ class IncidentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="assigned")
     def assigned(self, request):
-        queryset = (
-            self.get_queryset()
-            .filter(
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(
                 status__in={
                     IncidentStatus.ASSIGNED,
                     IncidentStatus.IN_PROGRESS,
+                    IncidentStatus.REOPENED,
                 }
-            )
-            .order_by("-priority_rank", "-updated_at", "-pk")
-        )
+            ),
+            request,
+        ).order_by("-priority_rank", "-updated_at", "-pk")
         page = self.paginate_queryset(queryset)
         serializer = IncidentOfficialDetailSerializer(page, many=True)
         return self.get_paginated_response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="completed")
     def official_completed(self, request):
-        queryset = (
-            self.get_queryset()
-            .filter(
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(
                 status__in={
                     IncidentStatus.RESOLVED,
                     IncidentStatus.CLOSED,
                 }
-            )
-            .order_by("-updated_at")
-        )
+            ),
+            request,
+        ).order_by("-updated_at")
         page = self.paginate_queryset(queryset)
         serializer = IncidentOfficialDetailSerializer(page, many=True)
         return self.get_paginated_response(serializer.data)
@@ -338,7 +534,12 @@ class IncidentViewSet(viewsets.ModelViewSet):
                 total_incidents=Count("id"),
                 awaiting_action=Count(
                     "id",
-                    filter=Q(status=IncidentStatus.FORWARDED_TO_DEAN),
+                    filter=Q(
+                        status__in={
+                            IncidentStatus.NOT_STARTED,
+                            IncidentStatus.REOPENED,
+                        }
+                    ),
                 ),
                 assigned=Count("id", filter=Q(status=IncidentStatus.ASSIGNED)),
                 in_progress=Count("id", filter=Q(status=IncidentStatus.IN_PROGRESS)),
@@ -350,61 +551,83 @@ class IncidentViewSet(viewsets.ModelViewSet):
             )
         )
 
+    @action(detail=False, methods=["get"], url_path="management-overview")
+    def management_overview(self, request):
+        return Response(build_management_overview())
+
     @action(detail=False, methods=["get"], url_path="awaiting-action")
     def awaiting_action(self, request):
-        queryset = (
-            self.get_queryset()
-            .filter(status=IncidentStatus.FORWARDED_TO_DEAN)
-            .order_by("-priority_rank", "created_at", "pk")
-        )
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(
+                status__in=[IncidentStatus.NOT_STARTED, IncidentStatus.REOPENED]
+            ),
+            request,
+        ).order_by("-priority_rank", "created_at", "pk")
         page = self.paginate_queryset(queryset)
-        serializer = IncidentDeanDetailSerializer(page, many=True)
+        serializer_class = (
+            IncidentManagementDetailSerializer
+            if request.user.role == UserRole.MANAGEMENT
+            else IncidentDeanDetailSerializer
+        )
+        serializer = serializer_class(page, many=True)
         return self.get_paginated_response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="currently-underway")
     def currently_underway(self, request):
-        queryset = (
-            self.get_queryset()
-            .filter(
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(
                 status__in={
                     IncidentStatus.ASSIGNED,
                     IncidentStatus.IN_PROGRESS,
                     IncidentStatus.RESOLVED,
                 }
-            )
-            .order_by("-priority_rank", "-updated_at", "-pk")
-        )
+            ),
+            request,
+        ).order_by("-priority_rank", "-updated_at", "-pk")
         page = self.paginate_queryset(queryset)
-        serializer = IncidentDeanDetailSerializer(page, many=True)
+        serializer_class = (
+            IncidentManagementDetailSerializer
+            if request.user.role == UserRole.MANAGEMENT
+            else IncidentDeanDetailSerializer
+        )
+        serializer = serializer_class(page, many=True)
         return self.get_paginated_response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="dean-completed")
     def dean_completed(self, request):
-        queryset = (
-            self.get_queryset()
-            .filter(status=IncidentStatus.CLOSED)
-            .order_by("-closed_at", "-updated_at")
-        )
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(status=IncidentStatus.CLOSED),
+            request,
+        ).order_by("-closed_at", "-updated_at")
         page = self.paginate_queryset(queryset)
-        serializer = IncidentDeanDetailSerializer(page, many=True)
+        serializer_class = (
+            IncidentManagementDetailSerializer
+            if request.user.role == UserRole.MANAGEMENT
+            else IncidentDeanDetailSerializer
+        )
+        serializer = serializer_class(page, many=True)
         return self.get_paginated_response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="pending-review")
     def pending_review(self, request):
-        queryset = (
-            self.get_queryset()
-            .filter(status__in=PENDING_REVIEW_STATUSES)
-            .order_by("created_at")
-        )
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(status__in=PENDING_REVIEW_STATUSES),
+            request,
+        ).order_by("created_at")
         page = self.paginate_queryset(queryset)
         serializer = IncidentAdminReviewSerializer(page, many=True)
         return self.get_paginated_response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="pending-changes")
     def pending_changes(self, request):
-        queryset = self.get_queryset().filter(
-            revisions__status=IncidentRevisionStatus.PENDING
-        ).distinct().order_by("revisions__submitted_at")
+        pending_revision = IncidentRevision.objects.filter(
+            incident=OuterRef("pk"),
+            status=IncidentRevisionStatus.PENDING,
+        )
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(Exists(pending_revision)),
+            request,
+        ).order_by("-updated_at")
         page = self.paginate_queryset(queryset)
         return self.get_paginated_response(
             IncidentAdminReviewSerializer(page, many=True).data
@@ -414,7 +637,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
     def forwarded_reports(self, request):
         queryset = self.get_queryset().filter(
             status__in={
-                IncidentStatus.FORWARDED_TO_DEAN,
+                IncidentStatus.NOT_STARTED,
                 IncidentStatus.ASSIGNED,
                 IncidentStatus.IN_PROGRESS,
                 IncidentStatus.RESOLVED,
@@ -428,8 +651,9 @@ class IncidentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="rejected-reports")
     def rejected_reports(self, request):
-        queryset = self.get_queryset().filter(
-            status=IncidentStatus.REJECTED
+        queryset = apply_staff_dashboard_filters(
+            self.get_queryset().filter(status=IncidentStatus.REJECTED),
+            request,
         ).order_by("-updated_at")
         page = self.paginate_queryset(queryset)
         return self.get_paginated_response(
@@ -446,11 +670,11 @@ class IncidentViewSet(viewsets.ModelViewSet):
                     distinct=True,
                     filter=Q(status__in=PENDING_REVIEW_STATUSES),
                 ),
-                verified=Count("id", distinct=True, filter=Q(status=IncidentStatus.VERIFIED)),
+                verified=Count("id", distinct=True, filter=Q(status=IncidentStatus.NOT_STARTED)),
                 forwarded_to_dean=Count(
                     "id",
                     distinct=True,
-                    filter=Q(status=IncidentStatus.FORWARDED_TO_DEAN),
+                    filter=Q(status=IncidentStatus.NOT_STARTED),
                 ),
                 rejected=Count("id", distinct=True, filter=Q(status=IncidentStatus.REJECTED)),
                 pending_changes=Count(
@@ -465,7 +689,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         detail=True,
         methods=["post"],
         url_path="submit-changes",
-        permission_classes=[IsStudent],
+        permission_classes=[IsReporter],
     )
     def submit_changes(self, request, pk=None):
         incident = self.get_object()
@@ -530,6 +754,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
     )
     def approve_changes(self, request, pk=None):
         incident = self.get_object()
+        if not user_can_admin_review_incident(request.user, incident):
+            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
         revision = self._get_pending_revision(incident)
         if not revision:
             return Response(
@@ -567,6 +793,8 @@ class IncidentViewSet(viewsets.ModelViewSet):
     )
     def reject_changes(self, request, pk=None):
         incident = self.get_object()
+        if not user_can_admin_review_incident(request.user, incident):
+            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
         revision = self._get_pending_revision(incident)
         if not revision:
             return Response(
@@ -598,36 +826,45 @@ class IncidentViewSet(viewsets.ModelViewSet):
     def upload_image(self, request, pk=None):
         incident = self.get_object()
         if incident.status == IncidentStatus.CLOSED:
-            raise ValidationError({"image": "Closed incidents cannot accept new evidence."})
+            raise ValidationError({"file": "Closed incidents cannot accept new evidence."})
         if incident.images.count() >= 5:
-            raise ValidationError({"image": "An incident can contain up to five images."})
+            raise ValidationError({"file": "A report can include up to five evidence files."})
 
-        if request.user.role == UserRole.STUDENT:
+        if request.user.role in {UserRole.STUDENT, UserRole.LECTURER}:
             if incident.reporter_id != request.user.id:
                 return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
             if incident.status != IncidentStatus.SUBMITTED:
                 return Response(
-                    {"detail": "Images can only be added while the incident is submitted."},
+                    {"detail": "Evidence can only be added while the case is submitted."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         elif not user_can_modify_incident(request.user, incident):
             return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
 
-        uploaded_file = request.FILES.get("image")
+        uploaded_file = (
+            request.FILES.get("file")
+            or request.FILES.get("image")
+            or request.FILES.get("video")
+        )
         if not uploaded_file:
-            raise ValidationError({"image": "An image file is required."})
+            raise ValidationError({"file": "An image or video file is required."})
 
         try:
-            upload_result = upload_incident_image(uploaded_file, incident.incident_number)
-        except ValidationError:
-            raise
+            upload_result = upload_incident_media(uploaded_file, incident.incident_number)
+        except ValidationError as exc:
+            detail = exc.detail if hasattr(exc, "detail") else {"file": str(exc)}
+            if isinstance(detail, list):
+                detail = {"file": detail[0]}
+            raise ValidationError(detail) from exc
         except ValueError as exc:
-            raise ValidationError({"image": str(exc)}) from exc
+            raise ValidationError({"file": str(exc)}) from exc
         except Exception as exc:
-            raise ValidationError({"image": "We couldn't upload the image. Please try again."}) from exc
+            raise ValidationError({"file": "We couldn't upload the file. Please try again."}) from exc
 
         image = IncidentImage.objects.create(
             incident=incident,
+            media_type=upload_result["media_type"],
+            resource_format=upload_result.get("format", ""),
             cloudinary_public_id=upload_result["public_id"],
             cloudinary_url=upload_result["secure_url"],
             original_filename=getattr(uploaded_file, "name", ""),
@@ -641,45 +878,10 @@ class IncidentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="public")
     def list_public(self, request):
-        queryset = public_incident_queryset(request.user)
-        stage = request.query_params.get("stage")
-        if stage == "forwarded":
-            queryset = queryset.filter(
-                status__in=[
-                    IncidentStatus.VERIFIED,
-                    IncidentStatus.FORWARDED_TO_DEAN,
-                    IncidentStatus.ASSIGNED,
-                ],
-            )
-        elif stage == "in_progress":
-            queryset = queryset.filter(status=IncidentStatus.IN_PROGRESS)
-        elif stage == "completed":
-            queryset = queryset.filter(
-                status__in=[IncidentStatus.RESOLVED, IncidentStatus.CLOSED],
-            )
-
-        search = request.query_params.get("q", "").strip()
-        if search:
-            queryset = queryset.filter(
-                Q(incident_number__icontains=search)
-                | Q(title__icontains=search)
-                | Q(category__name__icontains=search)
-                | Q(location__name__icontains=search),
-            )
-
-        category = request.query_params.get("category")
-        if category and category.isdigit():
-            queryset = queryset.filter(category_id=int(category))
-
-        location = request.query_params.get("location")
-        if location and location.isdigit():
-            queryset = queryset.filter(location_id=int(location))
-
-        ordering = request.query_params.get("ordering", "recent")
-        if ordering == "highest_votes":
-            queryset = queryset.order_by("-vote_count", "-created_at")
-        else:
-            queryset = queryset.order_by("-created_at")
+        queryset = apply_public_list_filters(
+            public_incident_queryset(request.user),
+            request,
+        )
         page = self.paginate_queryset(queryset)
         serializer = PublicIncidentSerializer(
             page,
@@ -687,6 +889,29 @@ class IncidentViewSet(viewsets.ModelViewSet):
             context={"request": request},
         )
         return self.get_paginated_response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="public-register")
+    def list_public_register(self, request):
+        """Categories, locations, and paginated public cases in one response (register page)."""
+        categories = CategorySerializer(
+            Category.objects.filter(is_active=True),
+            many=True,
+        ).data
+        locations = LocationSerializer(_public_filter_locations_queryset(), many=True).data
+        queryset = apply_public_list_filters(
+            public_incident_queryset(request.user),
+            request,
+        )
+        page = self.paginate_queryset(queryset)
+        serializer = PublicIncidentSerializer(
+            page,
+            many=True,
+            context={"request": request},
+        )
+        response = self.get_paginated_response(serializer.data)
+        response.data["categories"] = categories
+        response.data["locations"] = locations
+        return response
 
     @action(detail=True, methods=["get"], url_path="public")
     def retrieve_public(self, request, pk=None):
@@ -734,7 +959,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.status = new_status
         now = timezone.now()
 
-        if new_status == IncidentStatus.VERIFIED:
+        if new_status == IncidentStatus.NOT_STARTED:
             incident.verified_at = now
         elif new_status == IncidentStatus.RESOLVED:
             incident.resolved_at = now
@@ -802,7 +1027,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.refresh_from_db()
         return Response(IncidentAdminReviewSerializer(incident).data)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsDean])
+    @action(detail=True, methods=["post"], permission_classes=[IsAdmin])
     def assign(self, request, pk=None):
         incident = self.get_object()
         if not user_can_assign_incident(request.user, incident):
@@ -827,7 +1052,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.refresh_from_db()
         return Response(IncidentDeanDetailSerializer(incident).data)
 
-    @action(detail=True, methods=["post"], url_path="start-progress", permission_classes=[IsOfficial])
+    @action(detail=True, methods=["post"], url_path="start-progress", permission_classes=[IsAuthority])
     def start_progress(self, request, pk=None):
         incident = self.get_object()
         if not user_can_start_progress_incident(request.user, incident):
@@ -848,7 +1073,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.refresh_from_db()
         return Response(IncidentOfficialDetailSerializer(incident).data)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsOfficial])
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthority])
     def resolve(self, request, pk=None):
         incident = self.get_object()
         if not user_can_resolve_incident(request.user, incident):
@@ -869,7 +1094,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.refresh_from_db()
         return Response(IncidentOfficialDetailSerializer(incident).data)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsDean])
+    @action(detail=True, methods=["post"], permission_classes=[IsAdmin])
     def close(self, request, pk=None):
         incident = self.get_object()
         if not user_can_close_incident(request.user, incident):
@@ -890,7 +1115,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         incident.refresh_from_db()
         return Response(IncidentDeanDetailSerializer(incident).data)
 
-    @action(detail=True, methods=["post"], url_path="reopen", permission_classes=[IsDean])
+    @action(detail=True, methods=["post"], url_path="reopen", permission_classes=[IsAdmin])
     def reopen(self, request, pk=None):
         incident = self.get_object()
         if not user_can_reopen_incident(request.user, incident):
@@ -901,7 +1126,7 @@ class IncidentViewSet(viewsets.ModelViewSet):
         comment = serializer.validated_data.get("comment", "")
 
         try:
-            transition_incident(incident, IncidentStatus.IN_PROGRESS)
+            transition_incident(incident, IncidentStatus.REOPENED)
         except InvalidStatusTransitionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 

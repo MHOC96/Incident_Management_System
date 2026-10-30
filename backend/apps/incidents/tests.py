@@ -34,19 +34,19 @@ class OfficialFlowTests(TestCase):
             email="dean@usj.lk",
             password="testpass123",
             name="Test Dean",
-            role=UserRole.DEAN,
+            role=UserRole.MANAGEMENT,
         )
         self.official = User.objects.create_user(
             email="official@usj.lk",
             password="testpass123",
             name="Test Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         self.other_official = User.objects.create_user(
             email="other-official@usj.lk",
             password="testpass123",
             name="Other Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         category = Category.objects.create(name="Maintenance", slug="maintenance")
         location = Location.objects.create(name="Block B")
@@ -57,7 +57,7 @@ class OfficialFlowTests(TestCase):
             category=category,
             location=location,
             reporter=self.student,
-            status=IncidentStatus.FORWARDED_TO_DEAN,
+            status=IncidentStatus.NOT_STARTED,
         )
         assign_incident(
             self.incident,
@@ -115,7 +115,7 @@ class OfficialFlowTests(TestCase):
             ).exists()
         )
 
-    def test_resolve_allows_empty_comment(self):
+    def test_resolve_requires_comment(self):
         self.incident.status = IncidentStatus.IN_PROGRESS
         self.incident.save(update_fields=["status", "updated_at"])
         response = self.client.post(
@@ -123,10 +123,9 @@ class OfficialFlowTests(TestCase):
             {},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         self.incident.refresh_from_db()
-        self.assertEqual(self.incident.status, IncidentStatus.RESOLVED)
-        self.assertEqual(self.incident.resolution_statement, "")
+        self.assertEqual(self.incident.status, IncidentStatus.IN_PROGRESS)
 
     def test_assigned_list_returns_only_official_incidents(self):
         other_incident = Incident.objects.create(
@@ -136,7 +135,7 @@ class OfficialFlowTests(TestCase):
             category=self.incident.category,
             location=self.incident.location,
             reporter=self.student,
-            status=IncidentStatus.FORWARDED_TO_DEAN,
+            status=IncidentStatus.NOT_STARTED,
         )
         assign_incident(
             other_incident,
@@ -270,7 +269,7 @@ class IncidentSecurityAndPublicTests(TestCase):
             email="official@usj.lk",
             password="testpass123",
             name="Test Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         category = Category.objects.create(name="Maintenance", slug="maintenance")
         location = Location.objects.create(name="Block B")
@@ -291,15 +290,15 @@ class IncidentSecurityAndPublicTests(TestCase):
             category=category,
             location=location,
             reporter=self.student,
-            status=IncidentStatus.VERIFIED,
+            status=IncidentStatus.NOT_STARTED,
             visibility=IncidentVisibility.PUBLIC,
         )
 
-    def test_public_detail_hides_unverified_incidents(self):
+    def test_public_detail_hides_unreviewed_incidents(self):
         response = self.client.get(f"/api/incidents/{self.public_submitted.id}/public/")
         self.assertEqual(response.status_code, 404)
 
-    def test_public_detail_returns_verified_incidents(self):
+    def test_public_detail_returns_public_accepted_incidents(self):
         response = self.client.get(f"/api/incidents/{self.public_verified.id}/public/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -335,13 +334,13 @@ class DeanOversightTests(TestCase):
             email="oversight-dean@usj.lk",
             password="testpass123",
             name="Oversight Dean",
-            role=UserRole.DEAN,
+            role=UserRole.MANAGEMENT,
         )
         self.official = User.objects.create_user(
             email="oversight-official@usj.lk",
             password="testpass123",
             name="Oversight Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         category = Category.objects.create(name="Electrical", slug="electrical")
         location = Location.objects.create(name="Main Hall")
@@ -352,7 +351,7 @@ class DeanOversightTests(TestCase):
             category=category,
             location=location,
             reporter=self.student,
-            status=IncidentStatus.FORWARDED_TO_DEAN,
+            status=IncidentStatus.NOT_STARTED,
         )
         self.assigned = Incident.objects.create(
             incident_number="INC-2026-00041",
@@ -361,7 +360,7 @@ class DeanOversightTests(TestCase):
             category=category,
             location=location,
             reporter=self.student,
-            status=IncidentStatus.FORWARDED_TO_DEAN,
+            status=IncidentStatus.NOT_STARTED,
         )
         assign_incident(
             self.assigned,
@@ -376,7 +375,7 @@ class DeanOversightTests(TestCase):
             category=category,
             location=location,
             reporter=self.student,
-            status=IncidentStatus.FORWARDED_TO_DEAN,
+            status=IncidentStatus.NOT_STARTED,
         )
         assign_incident(
             self.in_progress,
@@ -394,6 +393,25 @@ class DeanOversightTests(TestCase):
         self.assertEqual(data["awaiting_action"], 1)
         self.assertEqual(data["assigned"], 1)
         self.assertEqual(data["in_progress"], 1)
+
+    def test_management_overview_for_faculty_management(self):
+        self.client.force_authenticate(user=self.dean)
+        response = self.client.get("/api/incidents/management-overview/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("complaints", data)
+        self.assertIn("resolution_rate", data)
+        self.assertIn("authorities", data)
+        self.assertEqual(len(data["authorities"]), 1)
+        authority = data["authorities"][0]
+        self.assertEqual(authority["assigned_total"], 2)
+        self.assertEqual(authority["in_progress"], 1)
+        self.assertEqual(authority["not_started"], 1)
+
+    def test_student_cannot_access_management_overview(self):
+        self.client.force_authenticate(user=self.student)
+        response = self.client.get("/api/incidents/management-overview/")
+        self.assertEqual(response.status_code, 403)
 
     def test_dean_can_list_currently_underway_incidents(self):
         self.client.force_authenticate(user=self.dean)
@@ -470,7 +488,7 @@ class IncidentVoteTests(TestCase):
             email="vote-official@usj.lk",
             password="testpass123",
             name="Voting Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         category = Category.objects.create(name="Safety", slug="vote-safety")
         location = Location.objects.create(name="Library entrance")
@@ -536,6 +554,7 @@ class IncidentVoteTests(TestCase):
         IncidentVote.objects.create(incident=self.incident, user=self.other_student)
         IncidentVote.objects.create(incident=self.completed, user=self.student)
 
+        self.client.force_authenticate(user=self.student)
         response = self.client.get("/api/incidents/public/?ordering=highest_votes")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"][0]["id"], self.incident.id)
@@ -683,14 +702,13 @@ class IncidentRevisionWorkflowTests(TestCase):
         self.client.force_authenticate(user=self.admin)
 
         pending_response = self.client.get("/api/incidents/pending-changes/")
-        forwarded_response = self.client.get("/api/incidents/forwarded-reports/")
+        assignment_response = self.client.get("/api/incidents/awaiting-action/")
         rejected_response = self.client.get("/api/incidents/rejected-reports/")
 
         self.assertEqual(pending_response.status_code, 200)
-        self.assertEqual(forwarded_response.status_code, 200)
+        self.assertEqual(assignment_response.status_code, 200)
         self.assertEqual(rejected_response.status_code, 200)
         self.assertIn(self.incident.id, {item["id"] for item in pending_response.json()["results"]})
-        self.assertIn(self.incident.id, {item["id"] for item in forwarded_response.json()["results"]})
         self.assertIn(rejected.id, {item["id"] for item in rejected_response.json()["results"]})
 
     def test_student_can_delete_own_unapproved_report(self):

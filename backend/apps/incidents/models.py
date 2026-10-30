@@ -2,9 +2,12 @@ from django.conf import settings
 from django.db import models
 
 from apps.common.choices import (
+    CaseType,
+    IncidentMediaType,
     IncidentPriority,
     IncidentStatus,
     IncidentVisibility,
+    ReporterPriority,
 )
 
 
@@ -62,6 +65,16 @@ class Incident(models.Model):
     incident_number = models.CharField(max_length=20, unique=True, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField()
+    case_type = models.CharField(
+        max_length=20,
+        choices=CaseType.choices,
+        default=CaseType.COMPLAINT,
+    )
+    reporter_priority = models.CharField(
+        max_length=10,
+        choices=ReporterPriority.choices,
+        default=ReporterPriority.NORMAL,
+    )
     category = models.ForeignKey(
         Category,
         on_delete=models.PROTECT,
@@ -190,6 +203,12 @@ class IncidentImage(models.Model):
         on_delete=models.CASCADE,
         related_name="images",
     )
+    media_type = models.CharField(
+        max_length=10,
+        choices=IncidentMediaType.choices,
+        default=IncidentMediaType.IMAGE,
+    )
+    resource_format = models.CharField(max_length=12, blank=True)
     cloudinary_public_id = models.CharField(max_length=255)
     cloudinary_url = models.URLField(max_length=500)
     original_filename = models.CharField(max_length=255, blank=True)

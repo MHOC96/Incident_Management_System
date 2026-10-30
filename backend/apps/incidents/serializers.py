@@ -63,6 +63,7 @@ class IncidentImageSerializer(serializers.ModelSerializer):
         model = IncidentImage
         fields = [
             "id",
+            "media_type",
             "cloudinary_url",
             "original_filename",
             "uploaded_at",
@@ -169,6 +170,8 @@ class IncidentAdminReviewSerializer(IncidentRecordSerializer):
             "incident_number",
             "title",
             "description",
+            "case_type",
+            "reporter_priority",
             "category",
             "location",
             "status",
@@ -255,6 +258,17 @@ class IncidentDeanDetailSerializer(IncidentAdminReviewSerializer):
         return get_current_assignment_data(obj)
 
 
+class IncidentManagementDetailSerializer(IncidentDeanDetailSerializer):
+    """Faculty management read-only detail: official priority only, no reporter urgency."""
+
+    class Meta(IncidentDeanDetailSerializer.Meta):
+        fields = [
+            field
+            for field in IncidentDeanDetailSerializer.Meta.fields
+            if field != "reporter_priority"
+        ]
+
+
 class IncidentResolveSerializer(serializers.Serializer):
     comment = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -263,7 +277,10 @@ class IncidentOfficialDetailSerializer(IncidentDetailSerializer):
     current_assignment = serializers.SerializerMethodField()
 
     class Meta(IncidentDetailSerializer.Meta):
-        fields = IncidentDetailSerializer.Meta.fields + ["current_assignment"]
+        fields = IncidentDetailSerializer.Meta.fields + [
+            "case_type",
+            "current_assignment",
+        ]
 
     def get_current_assignment(self, obj):
         return get_current_assignment_data(obj)
@@ -306,6 +323,8 @@ class IncidentCreateSerializer(serializers.ModelSerializer):
         fields = [
             "title",
             "description",
+            "case_type",
+            "reporter_priority",
             "category",
             "location",
             "location_name",
@@ -385,7 +404,7 @@ class IncidentRejectSerializer(serializers.Serializer):
 
 class IncidentAssignSerializer(serializers.Serializer):
     assigned_official = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.filter(role=UserRole.OFFICIAL, status=AccountStatus.ACTIVE),
+        queryset=User.objects.filter(role=UserRole.AUTHORITY, status=AccountStatus.ACTIVE),
     )
     responsible_party = serializers.PrimaryKeyRelatedField(
         queryset=ResponsibleParty.objects.filter(is_active=True),
@@ -449,7 +468,7 @@ class ResponsiblePartySerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     def validate_officials(self, value):
-        invalid = [user for user in value if user.role != UserRole.OFFICIAL]
+        invalid = [user for user in value if user.role != UserRole.AUTHORITY]
         if invalid:
             raise serializers.ValidationError("All assigned users must be officials.")
         return value

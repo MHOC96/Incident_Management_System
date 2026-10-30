@@ -37,7 +37,7 @@ class PermissionFoundationTests(TestCase):
             email="dean@usj.lk",
             password="testpass123",
             name="Test Dean",
-            role=UserRole.DEAN,
+            role=UserRole.MANAGEMENT,
         )
         category = Category.objects.create(name="Maintenance", slug="maintenance")
         location = Location.objects.create(name="Block B")
@@ -65,9 +65,10 @@ class PermissionFoundationTests(TestCase):
         self.incident.status = IncidentStatus.RESOLVED
         self.assertFalse(user_can_close_incident(self.student, self.incident))
 
-    def test_dean_can_close_resolved_incident(self):
+    def test_admin_can_close_resolved_incident(self):
         self.incident.status = IncidentStatus.RESOLVED
-        self.assertTrue(user_can_close_incident(self.dean, self.incident))
+        self.assertTrue(user_can_close_incident(self.admin, self.incident))
+        self.assertFalse(user_can_close_incident(self.dean, self.incident))
 
 
 class AdminReviewFlowTests(TestCase):
@@ -106,7 +107,7 @@ class AdminReviewFlowTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.incident.refresh_from_db()
-        self.assertEqual(self.incident.status, IncidentStatus.FORWARDED_TO_DEAN)
+        self.assertEqual(self.incident.status, IncidentStatus.NOT_STARTED)
         self.assertIsNotNone(self.incident.verified_at)
         self.assertTrue(
             Notification.objects.filter(
@@ -141,7 +142,7 @@ class AdminReviewFlowTests(TestCase):
     def test_admin_verify_service_chain(self):
         admin_verify_and_forward(self.incident, verified_at=timezone.now())
         self.incident.refresh_from_db()
-        self.assertEqual(self.incident.status, IncidentStatus.FORWARDED_TO_DEAN)
+        self.assertEqual(self.incident.status, IncidentStatus.NOT_STARTED)
 
 
 class AuthEndpointTests(TestCase):
@@ -257,7 +258,7 @@ class AuthEndpointTests(TestCase):
             email="official@usj.lk",
             password="testpass123",
             name="Test Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         official.status = AccountStatus.INACTIVE
         official.save(update_fields=["status", "updated_at"])
@@ -274,13 +275,13 @@ class AuthEndpointTests(TestCase):
             email="dean@usj.lk",
             password="testpass123",
             name="Test Dean",
-            role=UserRole.DEAN,
+            role=UserRole.MANAGEMENT,
         )
         official = User.objects.create_user(
             email="official2@usj.lk",
             password="testpass123",
             name="Test Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         self.client.force_authenticate(user=dean)
         response = self.client.patch(

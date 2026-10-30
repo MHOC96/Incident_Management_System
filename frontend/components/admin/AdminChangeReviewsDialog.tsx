@@ -153,7 +153,7 @@ export function AdminChangeReviewsDialog({ revisions }: Props) {
                 <div>
                   <h2 className="text-lg font-semibold">Change reviews</h2>
                   <p className="mt-1 text-sm text-text-secondary">
-                    Past student edit requests on this incident. Pending reviews are handled
+                    Past student edit requests on this case. Pending reviews are handled
                     from the changes queue.
                   </p>
                 </div>

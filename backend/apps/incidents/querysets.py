@@ -5,8 +5,7 @@ from apps.common.choices import IncidentStatus, IncidentVisibility, UserRole
 from apps.incidents.models import Incident, IncidentRevision, IncidentVote
 
 PUBLIC_VISIBLE_STATUSES = (
-    IncidentStatus.VERIFIED,
-    IncidentStatus.FORWARDED_TO_DEAN,
+    IncidentStatus.NOT_STARTED,
     IncidentStatus.ASSIGNED,
     IncidentStatus.IN_PROGRESS,
     IncidentStatus.RESOLVED,

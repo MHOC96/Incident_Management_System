@@ -1,16 +1,19 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useIncidentQueue } from "@/hooks/useIncidentQueue";
 import { Pagination } from "@/components/ui/Pagination";
 import {
-  DeanReviewQueueTabs,
+  ManagementReviewQueueTabs,
   type DeanQueueView,
-} from "@/components/dean/DeanReviewQueueTabs";
+} from "@/components/management/ManagementReviewQueueTabs";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentTable, type IncidentTableRow } from "@/components/dashboard/IncidentTable";
+import { ManagementOverviewPanel } from "@/components/management/ManagementOverviewPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { formatAssignedOfficialLabel } from "@/lib/format";
-import type { DeanIncident } from "@/types";
+import { deanIncidentService } from "@/services/managementIncidents";
+import type { DeanIncident, ManagementOverview } from "@/types";
 
 function toDeanRow(incident: DeanIncident, view: DeanQueueView): IncidentTableRow {
   return {
@@ -20,7 +23,7 @@ function toDeanRow(incident: DeanIncident, view: DeanQueueView): IncidentTableRo
     status: incident.status,
     priority: incident.priority,
     location: incident.location,
-    href: `/dean/incidents/${incident.id}`,
+    href: `/management/incidents/${incident.id}`,
     date:
       view === "completed" && incident.closed_at ? incident.closed_at : incident.updated_at,
     assignedTo: incident.current_assignment
@@ -32,24 +35,61 @@ function toDeanRow(incident: DeanIncident, view: DeanQueueView): IncidentTableRo
 const QUEUES: Record<DeanQueueView, string> = {"assignment":"/incidents/awaiting-action/","underway":"/incidents/currently-underway/","completed":"/incidents/dean-completed/"};
 
 function DeanDashboardContent() {
-  const { activeView, setActiveView, counts, items, isLoading, error, page, count, setPage } = useIncidentQueue<DeanQueueView, DeanIncident>(QUEUES, "assignment");
+  const { activeView, setActiveView, counts, items, isInitialLoading, isLoading, error, page, count, setPage } = useIncidentQueue<DeanQueueView, DeanIncident>(QUEUES, "assignment");
+  const [overview, setOverview] = useState<ManagementOverview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadOverview = () => {
+      void deanIncidentService
+        .getManagementOverview()
+        .then((data) => {
+          if (!cancelled) {
+            setOverview(data);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOverviewError("Could not load overview metrics. Refresh the page to try again.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setOverviewLoading(false);
+          }
+        });
+    };
+    if (typeof requestIdleCallback === "function") {
+      const idleId = requestIdleCallback(loadOverview, { timeout: 2500 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(idleId);
+      };
+    }
+    loadOverview();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const copy: Record<DeanQueueView, { title: string; empty: string; description: string }> = {
     underway: {
       title: "Currently underway",
-      empty: "No incidents are currently underway",
+      empty: "No cases are currently underway",
       description:
-        "Assigned, in-progress, and resolved reports appear here. Close resolved incidents when work is confirmed.",
+        "Assigned, in-progress, and resolved reports appear here until the administrator closes them.",
     },
     assignment: {
       title: "Needs assignment",
-      empty: "No incidents awaiting assignment",
-      description: "Verified incidents appear here after administrative review.",
+      empty: "No cases awaiting assignment",
+      description: "Accepted cases appear here after administrative review.",
     },
     completed: {
       title: "Completed",
-      empty: "No closed incidents yet",
-      description: "Incidents you have closed are listed here for reference.",
+      empty: "No closed cases yet",
+      description: "Closed cases are listed here for reference.",
     },
   };
 
@@ -60,7 +100,13 @@ function DeanDashboardContent() {
       <section className="py-6 md:py-10">
         <h1 className="mb-5 text-[26px] font-semibold md:mb-6 md:text-[32px]">Overview</h1>
 
-        {isLoading ? (
+        <ManagementOverviewPanel
+          data={overview}
+          isLoading={overviewLoading}
+          error={overviewError}
+        />
+
+        {isInitialLoading ? (
           <p className="py-12 text-sm text-text-secondary">Loading management workspace...</p>
         ) : (
           <>
@@ -75,7 +121,7 @@ function DeanDashboardContent() {
 
             <div className="border border-border bg-surface">
               <div className="border-b border-border px-4 pt-3 md:px-6 md:pt-4">
-                <DeanReviewQueueTabs
+                <ManagementReviewQueueTabs
                   activeView={activeView}
                   counts={counts}
                   onChange={setActiveView}
@@ -84,7 +130,10 @@ function DeanDashboardContent() {
               </div>
               <IncidentTable
                 showPriority
+                urgencySource="official"
+                priorityLabel="Priority"
                 showAssigned
+                isLoading={isLoading}
                 rows={rows}
                 emptyTitle={copy[activeView].empty}
                 emptyDescription={copy[activeView].description}
@@ -101,7 +150,7 @@ function DeanDashboardContent() {
 
 export default function DeanDashboardPage() {
   return (
-    <RequireAuth allowedRoles={["DEAN"]}>
+    <RequireAuth allowedRoles={["MANAGEMENT"]}>
       <DeanDashboardContent />
     </RequireAuth>
   );

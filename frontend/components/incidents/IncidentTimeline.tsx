@@ -26,7 +26,7 @@ export function buildTimelineEvents(
   const events: TimelineEvent[] = [
     {
       id: "submitted",
-      label: "Incident submitted",
+      label: "Case submitted",
       at: incident.created_at,
     },
   ];
@@ -34,14 +34,14 @@ export function buildTimelineEvents(
   if (incident.status === "REJECTED") {
     events.push({
       id: "rejected",
-      label: "Incident rejected",
+      label: "Case rejected",
       at: incident.updated_at,
     });
   } else {
     if (incident.verified_at) {
       events.push({
         id: "verified",
-        label: "Incident verified",
+        label: "Accepted for review",
         at: incident.verified_at,
       });
     }
@@ -77,7 +77,7 @@ export function buildTimelineEvents(
     if (incident.closed_at) {
       events.push({
         id: "closed",
-        label: "Incident closed",
+        label: "Case closed",
         at: incident.closed_at,
       });
     }

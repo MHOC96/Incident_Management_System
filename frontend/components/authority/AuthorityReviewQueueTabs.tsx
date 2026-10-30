@@ -7,19 +7,19 @@ const VIEWS: { value: OfficialQueueView; label: string }[] = [
   { value: "completed", label: "Completed" },
 ];
 
-type OfficialReviewQueueTabsProps = {
+type AuthorityReviewQueueTabsProps = {
   activeView: OfficialQueueView;
   counts: Record<OfficialQueueView, number>;
   onChange: (view: OfficialQueueView) => void;
 };
 
-export function OfficialReviewQueueTabs({
+export function AuthorityReviewQueueTabs({
   activeView,
   counts,
   onChange,
-}: OfficialReviewQueueTabsProps) {
+}: AuthorityReviewQueueTabsProps) {
   return (
-    <div className="admin-review-tabs" role="tablist" aria-label="Official incident queues">
+    <div className="admin-review-tabs" role="tablist" aria-label="Authority case queues">
       {VIEWS.map((view) => {
         const count = counts[view.value];
         const isActive = activeView === view.value;

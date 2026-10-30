@@ -4,11 +4,21 @@ from django.db import transaction
 from apps.accounts.models import User
 from apps.common.choices import AccountStatus, UserRole
 
-ALLOWED_ROLES = {UserRole.ADMIN, UserRole.DEAN}
+ALLOWED_ROLES = {
+    UserRole.ADMIN,
+    UserRole.MANAGEMENT,
+    UserRole.SYSADMIN,
+    UserRole.LECTURER,
+    UserRole.AUTHORITY,
+}
 
 
 class Command(BaseCommand):
-    help = "Provision an Admin or Dean account through a controlled backend procedure."
+    help = (
+        "Provision one staff account: ADMIN (Administrator), MANAGEMENT (Faculty "
+        "Management), SYSADMIN (System Administrator), LECTURER (reporter), or "
+        "AUTHORITY (Relevant Authority). Students use import_student_roster."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument("--email", required=True)
@@ -17,8 +27,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--role",
             required=True,
-            choices=sorted(ALLOWED_ROLES),
-            help="Only ADMIN or DEAN can be provisioned with this command.",
+            choices=sorted(r.value for r in ALLOWED_ROLES),
         )
         parser.add_argument("--phone", default="")
 
@@ -27,8 +36,8 @@ class Command(BaseCommand):
         role = options["role"]
         email = options["email"].lower().strip()
 
-        if role not in ALLOWED_ROLES:
-            raise CommandError("Only ADMIN or DEAN accounts can be provisioned.")
+        if role not in {r.value for r in ALLOWED_ROLES}:
+            raise CommandError(f"Unsupported role: {role}")
 
         if User.objects.filter(email=email).exists():
             raise CommandError(f"A user with email {email} already exists.")

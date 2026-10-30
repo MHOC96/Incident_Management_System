@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export function PageBanner({ title, description, eyebrow = "Incident Reporting & Resolution" }: { title: string; description?: string; eyebrow?: string }) {
+export function PageBanner({ title, description, eyebrow = "Complaints & suggestions" }: { title: string; description?: string; eyebrow?: string }) {
   return (
     <section className="page-banner">
       <div className="site-width">

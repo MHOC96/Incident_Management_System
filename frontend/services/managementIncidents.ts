@@ -1,15 +1,16 @@
 import { apiClient } from "@/lib/api";
 import type {
   DeanIncident,
-  DeanStats,
   IncidentAssignPayload,
   IncidentPriority,
+  ManagementOverview,
   PaginatedResponse,
   ResponsibleParty,
 } from "@/types";
 
 export const deanIncidentService = {
-  getStats: () => apiClient.get<DeanStats>("/incidents/dean-stats/"),
+  getManagementOverview: () =>
+    apiClient.get<ManagementOverview>("/incidents/management-overview/"),
 
   listAwaitingAction: () =>
     apiClient.get<PaginatedResponse<DeanIncident>>("/incidents/awaiting-action/"),

@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { formatApiError, getFieldErrors } from "@/lib/errors";
 import { placeholders } from "@/lib/placeholders";
 import { incidentService, referenceService } from "@/services/incidents";
-import type { Category, IncidentVisibility } from "@/types";
+import type { CaseType, Category, IncidentVisibility, ReporterPriority } from "@/types";
 
 export function IncidentForm() {
   const router = useRouter();
@@ -24,26 +24,37 @@ export function IncidentForm() {
   );
   const [formError, setFormError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [declarationConfirmed, setDeclarationConfirmed] = useState(false);
   const [form, setForm] = useState({
     title: "",
     description: "",
     category: "",
     location: "",
+    case_type: "COMPLAINT" as CaseType,
+    reporter_priority: "NORMAL" as ReporterPriority,
     visibility: "PRIVATE" as IncidentVisibility,
   });
 
   useEffect(() => {
+    const controller = new AbortController();
     void (async () => {
       try {
-        const categoryData = await referenceService.listCategories();
-        setCategories(categoryData);
+        const categoryData = await referenceService.listCategories(controller.signal);
+        if (!controller.signal.aborted) {
+          setCategories(categoryData);
+        }
       } catch {
-        setFormError("We couldn't load form options. Please refresh and try again.");
+        if (!controller.signal.aborted) {
+          setFormError("We couldn't load form options. Please refresh and try again.");
+        }
       } finally {
-        setIsLoadingOptions(false);
+        if (!controller.signal.aborted) {
+          setIsLoadingOptions(false);
+        }
       }
     })();
+    return () => controller.abort();
   }, []);
 
   function updateField(field: keyof typeof form, value: string) {
@@ -77,23 +88,40 @@ export function IncidentForm() {
       return;
     }
 
+    if (!declarationConfirmed) {
+      setErrors((current) => ({
+        ...current,
+        declaration: "You must confirm the declaration before submitting.",
+      }));
+      setIsSubmitting(false);
+      setSubmittingPhase(null);
+      return;
+    }
+
     try {
       const incident = await incidentService.create({
         title: form.title.trim(),
         description: form.description.trim(),
         category: Number(form.category),
         location_name: form.location.trim(),
+        case_type: form.case_type,
+        reporter_priority: form.reporter_priority,
         visibility: form.visibility,
       });
 
-      if (imageFile) {
+      if (evidenceFile) {
         setSubmittingPhase("uploading");
-        await incidentService.uploadImage(incident.id, imageFile);
+        try {
+          await incidentService.uploadEvidence(incident.id, evidenceFile);
+        } catch {
+          router.push(`/student/incidents/${incident.id}?submitted=1&uploadFailed=1`);
+          return;
+        }
       }
 
       router.push(`/student/incidents/${incident.id}?submitted=1`);
     } catch (error) {
-      setFormError(formatApiError(error, "We couldn't submit your incident. Please try again."));
+      setFormError(formatApiError(error, "We couldn't submit your case. Please try again."));
       setErrors(getFieldErrors(error));
       setIsSubmitting(false);
       setSubmittingPhase(null);
@@ -108,10 +136,42 @@ export function IncidentForm() {
     <form onSubmit={handleSubmit} className="w-full">
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)] lg:gap-8">
         <section className="rounded-lg border border-border bg-surface p-4 md:p-6">
-          <h2 className="mb-1 text-[18px] font-semibold">Incident details</h2>
+          <h2 className="mb-1 text-[18px] font-semibold">Case details</h2>
           <p className="mb-5 text-sm text-text-muted">
-            Describe the issue clearly so staff can find and assess it.
+            Describe your complaint or suggestion clearly so staff can assess it.
           </p>
+
+          <div className="mb-5 grid gap-4 sm:grid-cols-2">
+            <FormField label="Type" htmlFor="case_type" required error={errors.case_type}>
+              <Select
+                id="case_type"
+                value={form.case_type}
+                onChange={(event) => updateField("case_type", event.target.value)}
+                hasError={Boolean(errors.case_type)}
+                required
+              >
+                <option value="COMPLAINT">Complaint</option>
+                <option value="SUGGESTION">Suggestion</option>
+              </Select>
+            </FormField>
+            <FormField
+              label="Urgency"
+              htmlFor="reporter_priority"
+              required
+              error={errors.reporter_priority}
+            >
+              <Select
+                id="reporter_priority"
+                value={form.reporter_priority}
+                onChange={(event) => updateField("reporter_priority", event.target.value)}
+                hasError={Boolean(errors.reporter_priority)}
+                required
+              >
+                <option value="NORMAL">Normal</option>
+                <option value="URGENT">Urgent</option>
+              </Select>
+            </FormField>
+          </div>
 
           <FormField label="Title" htmlFor="title" required error={errors.title}>
             <Input
@@ -124,7 +184,7 @@ export function IncidentForm() {
             />
           </FormField>
 
-          <div className="grid sm:grid-cols-2 sm:gap-4 lg:grid-cols-1 xl:grid-cols-2">
+          <div className="mt-4 grid sm:grid-cols-2 sm:gap-4 lg:grid-cols-1 xl:grid-cols-2">
             <FormField label="Category" htmlFor="category" required error={errors.category}>
               <Select
                 id="category"
@@ -178,11 +238,15 @@ export function IncidentForm() {
 
         <div className="flex min-w-0 flex-col gap-6">
           <section className="rounded-lg border border-border bg-surface p-4 md:p-6">
-            <h2 className="mb-1 text-[18px] font-semibold">Photo</h2>
+            <h2 className="mb-1 text-[18px] font-semibold">Evidence</h2>
             <p className="mb-5 text-sm text-text-muted">
-              Optional. A photo helps staff locate the problem.
+              Optional. A photo or short video helps staff understand the issue.
             </p>
-            <ImageUpload file={imageFile} onChange={setImageFile} error={errors.image} />
+            <ImageUpload
+              file={evidenceFile}
+              onChange={setEvidenceFile}
+              error={errors.file ?? errors.image}
+            />
           </section>
 
           <section className="rounded-lg border border-border bg-surface p-4 md:p-6">
@@ -232,7 +296,7 @@ export function IncidentForm() {
                   <span>
                     <span className="font-medium text-foreground">Public</span>
                     <span className="mt-0.5 block text-text-secondary">
-                      May be listed publicly after verification.
+                      May be listed on the public complaints &amp; suggestions register after review.
                     </span>
                   </span>
                 </label>
@@ -243,10 +307,45 @@ export function IncidentForm() {
       </div>
 
       {formError ? (
-        <p role="alert" className="mt-6 rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-sm text-danger">
+        <p
+          role="alert"
+          className="mt-6 rounded-md border border-danger/20 bg-danger/5 px-3 py-2 text-sm text-danger"
+        >
           {formError}
         </p>
       ) : null}
+
+      <section className="mt-6">
+        <label className="flex cursor-pointer items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            name="declaration"
+            checked={declarationConfirmed}
+            onChange={(event) => {
+              setDeclarationConfirmed(event.target.checked);
+              if (event.target.checked) {
+                setErrors((current) => {
+                  const next = { ...current };
+                  delete next.declaration;
+                  return next;
+                });
+              }
+            }}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-border"
+            aria-invalid={Boolean(errors.declaration)}
+            aria-describedby={errors.declaration ? "declaration-error" : undefined}
+          />
+          <span className="text-text-secondary">
+            <span className="font-medium text-foreground">Declaration:</span> I confirm that the
+            information submitted is accurate to the best of my knowledge.
+          </span>
+        </label>
+        {errors.declaration ? (
+          <p id="declaration-error" role="alert" className="mt-2 text-sm text-danger">
+            {errors.declaration}
+          </p>
+        ) : null}
+      </section>
 
       <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
         <Link
@@ -260,10 +359,10 @@ export function IncidentForm() {
           className="w-full sm:w-auto"
           isLoading={isSubmitting}
           loadingText={
-            submittingPhase === "uploading" ? "Uploading photo..." : "Submitting report..."
+            submittingPhase === "uploading" ? "Uploading evidence..." : "Submitting report..."
           }
         >
-          Submit incident
+          Submit case
         </Button>
       </div>
     </form>

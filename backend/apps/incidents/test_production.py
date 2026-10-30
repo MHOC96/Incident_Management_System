@@ -22,7 +22,7 @@ class ProductionRegressionTests(TestCase):
 
     def make_incident(self, number):
         incident = Incident.objects.create(incident_number=f"INC-2026-{number:05d}", reporter=self.student,
-            category=self.category, location=self.location, title="Door", description="Broken", status="FORWARDED_TO_DEAN")
+            category=self.category, location=self.location, title="Door", description="Broken", status="NOT_STARTED")
         IncidentRevision.objects.create(incident=incident, submitted_by=self.student,
             original_title="Door", proposed_title="Door frame", original_description="Broken", proposed_description="Damaged",
             original_category=self.category, proposed_category=self.category, original_location=self.location,

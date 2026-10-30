@@ -4,8 +4,10 @@ export function getIncidentDetailRoute(role: UserRole, incidentId: number): stri
   const routes: Record<UserRole, string> = {
     STUDENT: `/student/incidents/${incidentId}`,
     ADMIN: `/admin/incidents/${incidentId}`,
-    DEAN: `/dean/incidents/${incidentId}`,
-    OFFICIAL: `/official/incidents/${incidentId}`,
+    LECTURER: `/student/incidents/${incidentId}`,
+    AUTHORITY: `/authority/incidents/${incidentId}`,
+    MANAGEMENT: `/management/incidents/${incidentId}`,
+    SYSADMIN: `/admin/incidents/${incidentId}`,
   };
   return routes[role];
 }

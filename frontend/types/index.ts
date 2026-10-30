@@ -1,4 +1,14 @@
-export type UserRole = "STUDENT" | "ADMIN" | "DEAN" | "OFFICIAL";
+export type UserRole =
+  | "STUDENT"
+  | "LECTURER"
+  | "ADMIN"
+  | "AUTHORITY"
+  | "MANAGEMENT"
+  | "SYSADMIN";
+
+export type CaseType = "COMPLAINT" | "SUGGESTION";
+
+export type ReporterPriority = "URGENT" | "NORMAL";
 
 export type OfficialPosition =
   | "VICE_CHANCELLOR"
@@ -12,13 +22,14 @@ export type AccountStatus = "INVITED" | "ACTIVE" | "INACTIVE" | "SUSPENDED";
 export type IncidentStatus =
   | "SUBMITTED"
   | "UNDER_REVIEW"
-  | "VERIFIED"
-  | "REJECTED"
-  | "FORWARDED_TO_DEAN"
+  | "NOT_STARTED"
   | "ASSIGNED"
   | "IN_PROGRESS"
+  | "WAITING_FOR_INFORMATION"
   | "RESOLVED"
-  | "CLOSED";
+  | "CLOSED"
+  | "REJECTED"
+  | "REOPENED";
 
 export type IncidentVisibility = "PUBLIC" | "PRIVATE" | "RESTRICTED";
 
@@ -82,8 +93,11 @@ export type Location = {
   is_active: boolean;
 };
 
+export type IncidentMediaType = "IMAGE" | "VIDEO";
+
 export type IncidentImage = {
   id: number;
+  media_type?: IncidentMediaType;
   cloudinary_url: string;
   original_filename: string;
   uploaded_at: string;
@@ -94,6 +108,8 @@ export type PublicIncident = {
   incident_number: string;
   title: string;
   description: string;
+  case_type: CaseType;
+  reporter_priority: ReporterPriority;
   category: Category;
   location: Location;
   status: IncidentStatus;
@@ -156,14 +172,7 @@ export type AdminIncidentReview = Omit<IncidentDetail, "reporter" | "reporter_na
   reporter: ReporterAdmin;
   pending_revision: IncidentRevision | null;
   revision_history: IncidentRevision[];
-};
-
-export type AdminReviewStats = {
-  pending_verification: number;
-  verified: number;
-  forwarded_to_dean: number;
-  rejected: number;
-  pending_changes: number;
+  current_assignment?: Assignment | null;
 };
 
 export type Assignment = {
@@ -192,13 +201,30 @@ export type DeanIncident = AdminIncidentReview & {
   current_assignment: Assignment | null;
 };
 
-export type DeanStats = {
-  total_incidents: number;
-  awaiting_action: number;
-  assigned: number;
+export type ManagementOverviewCategory = {
+  name: string;
+  count: number;
+};
+
+export type ManagementOverviewAuthority = {
+  id: number;
+  name: string;
+  position: string;
+  assigned_total: number;
   in_progress: number;
-  resolved_awaiting_closure: number;
-  closed: number;
+  not_started: number;
+  average_age_days: number;
+};
+
+export type ManagementOverview = {
+  complaints: number;
+  suggestions: number;
+  priority_high: number;
+  priority_standard: number;
+  resolution_rate: number;
+  average_resolution_days: number;
+  top_categories: ManagementOverviewCategory[];
+  authorities: ManagementOverviewAuthority[];
 };
 
 export type OfficialAccount = {
@@ -227,13 +253,6 @@ export type IncidentAssignPayload = {
 
 export type OfficialIncident = IncidentDetail & {
   current_assignment: Assignment | null;
-};
-
-export type OfficialStats = {
-  assigned: number;
-  in_progress: number;
-  resolved: number;
-  total_assigned: number;
 };
 
 export type NotificationType =
@@ -266,6 +285,8 @@ export type IncidentCreatePayload = {
   description: string;
   category: number;
   location_name: string;
+  case_type: CaseType;
+  reporter_priority: ReporterPriority;
   visibility: IncidentVisibility;
 };
 

@@ -7,18 +7,18 @@ import { Select } from "@/components/ui/Select";
 import { Toast, useToast } from "@/components/ui/Toast";
 import { formatOfficialAssignOption, getPriorityLabel } from "@/lib/format";
 import { formatApiError } from "@/lib/errors";
-import { deanIncidentService } from "@/services/deanIncidents";
+import { adminIncidentService } from "@/services/adminIncidents";
 import { officialService } from "@/services/officials";
-import type { DeanIncident, IncidentPriority, OfficialAccount } from "@/types";
+import type { AdminIncidentReview, IncidentPriority, OfficialAccount } from "@/types";
 
-type DeanAssignPanelProps = {
-  incident: DeanIncident;
-  onUpdated: (incident: DeanIncident) => void;
+type AdminAssignPanelProps = {
+  incident: AdminIncidentReview;
+  onUpdated: (incident: AdminIncidentReview) => void;
 };
 
 const priorityOptions: IncidentPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
-export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
+export function AdminAssignPanel({ incident, onUpdated }: AdminAssignPanelProps) {
   const assignRef = useRef<HTMLDialogElement>(null);
 
   const [officials, setOfficials] = useState<OfficialAccount[]>([]);
@@ -47,7 +47,8 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
     assignRef.current?.showModal();
   }
 
-  const canAssign = incident.status === "FORWARDED_TO_DEAN";
+  const canAssign =
+    incident.status === "NOT_STARTED" || incident.status === "REOPENED";
 
   const canClose = incident.status === "RESOLVED";
 
@@ -56,18 +57,18 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
     setIsSubmitting("assign");
     try {
       if (!assignedOfficial) {
-        setError("Select an official before assigning this incident.");
+        setError("Select a relevant authority before assigning this case.");
         return;
       }
-      const updated = await deanIncidentService.assign(incident.id, {
+      const updated = await adminIncidentService.assign(incident.id, {
         assigned_official: Number(assignedOfficial),
         priority,
       });
       onUpdated(updated);
       assignRef.current?.close();
-      showToast("Incident assigned successfully.");
+      showToast("Case assigned successfully.");
     } catch (assignError) {
-      setError(formatApiError(assignError, "We couldn't assign this incident."));
+      setError(formatApiError(assignError, "We couldn't assign this case."));
     } finally {
       setIsSubmitting(null);
     }
@@ -76,11 +77,11 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
   async function handleClose() {
     setIsSubmitting("close");
     try {
-      const updated = await deanIncidentService.close(incident.id);
+      const updated = await adminIncidentService.close(incident.id);
       onUpdated(updated);
-      showToast("Incident closed.");
+      showToast("Case closed.");
     } catch (closeError) {
-      showToast(formatApiError(closeError, "We couldn't close this incident."));
+      showToast(formatApiError(closeError, "We couldn't close this case."));
     } finally {
       setIsSubmitting(null);
     }
@@ -102,14 +103,14 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
             loadingText="Closing..."
             onClick={() => void handleClose()}
           >
-            Close incident
+            Close case
           </Button>
         ) : null}
       </div>
 
       <dialog
         ref={assignRef}
-        aria-label="Assign incident"
+        aria-label="Assign case"
         className="workspace-dialog workspace-dialog-wide"
         onClick={(event) => {
           if (event.target === event.currentTarget) assignRef.current?.close();
@@ -117,9 +118,9 @@ export function DeanAssignPanel({ incident, onUpdated }: DeanAssignPanelProps) {
       >
         <div className="workspace-dialog-panel">
           <div className="workspace-dialog-body">
-          <h2 className="text-lg font-semibold">Assign incident</h2>
+          <h2 className="text-lg font-semibold">Assign case</h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Select the official who will handle this incident and set official priority.
+            Select the relevant authority who will handle this case and set official priority.
           </p>
           <div className="mt-4 space-y-4">
             <FormField label="Assigned official" htmlFor="dean-official" required>

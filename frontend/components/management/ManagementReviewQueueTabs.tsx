@@ -8,19 +8,19 @@ const VIEWS: { value: DeanQueueView; label: string }[] = [
   { value: "completed", label: "Completed" },
 ];
 
-type DeanReviewQueueTabsProps = {
+type ManagementReviewQueueTabsProps = {
   activeView: DeanQueueView;
   counts: Record<DeanQueueView, number>;
   onChange: (view: DeanQueueView) => void;
 };
 
-export function DeanReviewQueueTabs({
+export function ManagementReviewQueueTabs({
   activeView,
   counts,
   onChange,
-}: DeanReviewQueueTabsProps) {
+}: ManagementReviewQueueTabsProps) {
   return (
-    <div className="admin-review-tabs" role="tablist" aria-label="Dean incident queues">
+    <div className="admin-review-tabs" role="tablist" aria-label="Management case queues">
       {VIEWS.map((view) => {
         const count = counts[view.value];
         const isActive = activeView === view.value;

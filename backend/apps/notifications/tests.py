@@ -29,13 +29,13 @@ class NotificationFlowTests(TestCase):
             email="dean@usj.lk",
             password="testpass123",
             name="Test Dean",
-            role=UserRole.DEAN,
+            role=UserRole.MANAGEMENT,
         )
         self.official = User.objects.create_user(
             email="official@usj.lk",
             password="testpass123",
             name="Test Official",
-            role=UserRole.OFFICIAL,
+            role=UserRole.AUTHORITY,
         )
         category = Category.objects.create(name="Maintenance", slug="maintenance")
         location = Location.objects.create(name="Block B")
@@ -125,8 +125,8 @@ class NotificationFlowTests(TestCase):
             0,
         )
 
-    def test_dean_can_reopen_resolved_incident(self):
-        self.incident.status = IncidentStatus.FORWARDED_TO_DEAN
+    def test_admin_can_reopen_resolved_incident(self):
+        self.incident.status = IncidentStatus.NOT_STARTED
         self.incident.save(update_fields=["status", "updated_at"])
         assign_incident(
             self.incident,
@@ -136,7 +136,7 @@ class NotificationFlowTests(TestCase):
         self.incident.status = IncidentStatus.RESOLVED
         self.incident.save(update_fields=["status", "updated_at"])
 
-        self.client.force_authenticate(user=self.dean)
+        self.client.force_authenticate(user=self.admin)
         response = self.client.post(
             f"/api/incidents/{self.incident.id}/reopen/",
             {"comment": "Please finish remaining repairs."},
@@ -144,5 +144,5 @@ class NotificationFlowTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.incident.refresh_from_db()
-        self.assertEqual(self.incident.status, IncidentStatus.IN_PROGRESS)
+        self.assertEqual(self.incident.status, IncidentStatus.REOPENED)
         self.assertEqual(self.incident.reopen_reason, "Please finish remaining repairs.")

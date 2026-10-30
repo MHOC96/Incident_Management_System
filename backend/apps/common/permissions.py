@@ -17,45 +17,94 @@ class IsStudent(BasePermission):
         return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.STUDENT
 
 
+class IsLecturer(BasePermission):
+    def has_permission(self, request, view):
+        return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.LECTURER
+
+
+class IsReporter(BasePermission):
+    """Student or lecturer — may submit cases."""
+
+    def has_permission(self, request, view):
+        return IsActiveUser().has_permission(request, view) and request.user.role in {
+            UserRole.STUDENT,
+            UserRole.LECTURER,
+        }
+
+
 class IsAdmin(BasePermission):
     def has_permission(self, request, view):
         return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.ADMIN
 
 
-class IsDean(BasePermission):
+class IsManagement(BasePermission):
     def has_permission(self, request, view):
-        return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.DEAN
+        return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.MANAGEMENT
 
 
-class IsOfficial(BasePermission):
+class IsAuthority(BasePermission):
     def has_permission(self, request, view):
-        return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.OFFICIAL
+        return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.AUTHORITY
 
 
-class IsAdminOrDean(BasePermission):
+class IsSysAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return IsActiveUser().has_permission(request, view) and request.user.role == UserRole.SYSADMIN
+
+
+# Backward-compatible aliases (remove after full rename)
+IsDean = IsManagement
+IsOfficial = IsAuthority
+
+
+class IsAdminOrManagement(BasePermission):
     def has_permission(self, request, view):
         return IsActiveUser().has_permission(request, view) and request.user.role in {
             UserRole.ADMIN,
-            UserRole.DEAN,
+            UserRole.MANAGEMENT,
         }
 
 
-class IsDeanOrOfficial(BasePermission):
+IsAdminOrDean = IsAdminOrManagement
+
+
+class IsAdminManagementOrSysAdmin(BasePermission):
     def has_permission(self, request, view):
         return IsActiveUser().has_permission(request, view) and request.user.role in {
-            UserRole.DEAN,
-            UserRole.OFFICIAL,
+            UserRole.ADMIN,
+            UserRole.MANAGEMENT,
+            UserRole.SYSADMIN,
         }
+
+
+class IsManagementOrSysAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return IsActiveUser().has_permission(request, view) and request.user.role in {
+            UserRole.MANAGEMENT,
+            UserRole.SYSADMIN,
+        }
+
+
+class IsManagementOrAuthority(BasePermission):
+    def has_permission(self, request, view):
+        return IsActiveUser().has_permission(request, view) and request.user.role in {
+            UserRole.MANAGEMENT,
+            UserRole.AUTHORITY,
+        }
+
+
+IsDeanOrOfficial = IsManagementOrAuthority
 
 
 class IsStaffRole(BasePermission):
-    """Admin, Dean, or Official."""
+    """Administrator, management, authority, or system administrator."""
 
     def has_permission(self, request, view):
         return IsActiveUser().has_permission(request, view) and request.user.role in {
             UserRole.ADMIN,
-            UserRole.DEAN,
-            UserRole.OFFICIAL,
+            UserRole.MANAGEMENT,
+            UserRole.AUTHORITY,
+            UserRole.SYSADMIN,
         }
 
 

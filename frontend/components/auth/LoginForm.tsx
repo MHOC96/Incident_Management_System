@@ -44,7 +44,6 @@ export function LoginForm() {
     } catch (error) {
       setFormError(formatApiError(error, "We couldn't sign you in. Please check your details."));
       setErrors(getFieldErrors(error));
-    } finally {
       setIsSubmitting(false);
     }
   }

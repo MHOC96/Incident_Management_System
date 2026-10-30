@@ -23,6 +23,7 @@ export function AdminReviewActions({ incident, onUpdated }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function run(action: () => Promise<AdminIncidentReview>) {
+    if (isSubmitting) return;
     setError("");
     setIsSubmitting(true);
     try {
@@ -110,6 +111,7 @@ export function AdminReviewActions({ incident, onUpdated }: Props) {
         variant="ghost"
         className="px-3 text-danger hover:text-danger"
         onClick={() => openReject("incident")}
+        disabled={isSubmitting}
       >
         Reject
       </Button>
@@ -157,7 +159,7 @@ function RejectDialog({
   return (
     <dialog
       ref={dialogRef}
-      aria-label={isChanges ? "Reject submitted changes" : "Reject incident report"}
+      aria-label={isChanges ? "Reject submitted changes" : "Reject case report"}
       className="m-auto w-[calc(100%-2rem)] max-w-md rounded-md border border-border bg-surface p-0 backdrop:bg-black/60"
       onClick={(event) => {
         if (event.target === event.currentTarget) dialogRef.current?.close();

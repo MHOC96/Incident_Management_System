@@ -59,7 +59,7 @@ function StudentAccountContent() {
 
 export default function StudentAccountPage() {
   return (
-    <RequireAuth allowedRoles={["STUDENT"]}>
+    <RequireAuth allowedRoles={["STUDENT", "LECTURER"]}>
       <StudentAccountContent />
     </RequireAuth>
   );

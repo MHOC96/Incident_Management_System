@@ -2,13 +2,10 @@ import { apiClient } from "@/lib/api";
 import type {
   IncidentDetail,
   OfficialIncident,
-  OfficialStats,
   PaginatedResponse,
 } from "@/types";
 
 export const officialIncidentService = {
-  getStats: () => apiClient.get<OfficialStats>("/incidents/official-stats/"),
-
   listActiveAssignments: () =>
     apiClient.get<PaginatedResponse<OfficialIncident>>("/incidents/assigned/"),
 

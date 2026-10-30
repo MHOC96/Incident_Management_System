@@ -5,37 +5,28 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { IncidentEvidence } from "@/components/incidents/IncidentEvidence";
+import { IncidentMetaGrid } from "@/components/incidents/IncidentMetaGrid";
+import { CasePriorityDisplay } from "@/components/incidents/CasePriorityDisplay";
 import {
   IncidentPageSkeleton,
   IncidentPageState,
 } from "@/components/incidents/IncidentPageState";
-import { IncidentPriorityBadge } from "@/components/incidents/IncidentPriorityBadge";
 import { IncidentStatusBadge } from "@/components/incidents/IncidentStatusBadge";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { OfficialProgressPanel } from "@/components/official/OfficialProgressPanel";
 import {
   formatAssignedOfficialLabel,
   formatDate,
   formatLocationPlace,
   getVisibilityLabel,
 } from "@/lib/format";
-import { officialIncidentService } from "@/services/officialIncidents";
-import type { OfficialIncident } from "@/types";
+import { getDeanStatusSummary } from "@/lib/incidentCopy";
+import { deanIncidentService } from "@/services/managementIncidents";
+import type { DeanIncident } from "@/types";
 
-function officialStatusNote(status: OfficialIncident["status"]): string | null {
-  if (status === "RESOLVED") {
-    return "You marked this incident as resolved. The Dean will review it.";
-  }
-  if (status === "CLOSED") {
-    return "The Dean has closed this incident.";
-  }
-  return null;
-}
-
-function OfficialIncidentDetailContent() {
+function DeanIncidentDetailContent() {
   const params = useParams<{ id: string }>();
-  const [incident, setIncident] = useState<OfficialIncident | null>(null);
+  const [incident, setIncident] = useState<DeanIncident | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,13 +34,13 @@ function OfficialIncidentDetailContent() {
     let ignore = false;
     void (async () => {
       try {
-        const data = await officialIncidentService.getById(Number(params.id));
+        const data = await deanIncidentService.getById(Number(params.id));
         if (!ignore) {
           setIncident(data);
         }
       } catch {
         if (!ignore) {
-          setError("We couldn't load this assigned incident.");
+          setError("We couldn't load this case.");
         }
       } finally {
         if (!ignore) {
@@ -74,14 +65,14 @@ function OfficialIncidentDetailContent() {
     return (
       <PageContainer width="app">
         <IncidentPageState
-          message={error || "This incident could not be found."}
+          message={error || "This case could not be found."}
           tone="danger"
         />
       </PageContainer>
     );
   }
 
-  const hasPhoto = incident.images.length > 0;
+  const hasEvidence = incident.images.length > 0;
   const locationPlace = formatLocationPlace(incident.location);
   const showProgressMeta = Boolean(
     incident.current_assignment ||
@@ -89,16 +80,19 @@ function OfficialIncidentDetailContent() {
       incident.resolved_at ||
       incident.closed_at,
   );
-  const statusNote = officialStatusNote(incident.status);
+  const summary = getDeanStatusSummary(
+    incident.status,
+    incident.current_assignment?.assigned_official_name,
+  );
 
   return (
     <PageContainer width="app">
       <section className="student-incident-detail py-4 md:py-6">
         <Link
-          href="/official/dashboard"
+          href="/management/dashboard"
           className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-dark"
         >
-          ← Back to assigned incidents
+          ← Back to overview
         </Link>
 
         <div className="student-detail-headrow mt-3">
@@ -106,9 +100,10 @@ function OfficialIncidentDetailContent() {
             <h1 className="public-incident-title min-w-0 break-words text-[24px] font-semibold leading-tight md:text-[30px]">
               {incident.title}
               <IncidentStatusBadge status={incident.status} />
-              {incident.priority ? (
-                <IncidentPriorityBadge priority={incident.priority} />
-              ) : null}
+              <CasePriorityDisplay
+                officialPriority={incident.priority}
+                urgencySource="official"
+              />
             </h1>
             <p className="mt-2 text-sm text-text-secondary">
               <span className="font-medium text-foreground">{incident.incident_number}</span>
@@ -121,11 +116,10 @@ function OfficialIncidentDetailContent() {
               <span className="text-text-muted"> · </span>
               <span>{getVisibilityLabel(incident.visibility)}</span>
             </p>
-            {statusNote ? (
-              <p className="mt-2 text-sm text-text-secondary">{statusNote}</p>
+            {summary ? (
+              <p className="mt-2 text-sm text-text-secondary">{summary}</p>
             ) : null}
           </div>
-          <OfficialProgressPanel incident={incident} onUpdated={setIncident} />
         </div>
 
         <div className="student-detail-grid">
@@ -137,12 +131,27 @@ function OfficialIncidentDetailContent() {
               </p>
             </div>
 
-            {hasPhoto ? (
+            {hasEvidence ? (
               <div className="student-detail-card p-3 md:p-4">
-                <h2 className="mb-2 text-base font-semibold">Photo</h2>
+                <h2 className="mb-2 text-base font-semibold">Evidence</h2>
                 <IncidentEvidence images={incident.images} title={incident.title} compact />
               </div>
             ) : null}
+
+            <div className="student-detail-card p-3 md:p-4">
+              <h2 className="text-base font-semibold">Reporter information</h2>
+              <div className="mt-3">
+                <IncidentMetaGrid
+                  items={[
+                    { label: "Name", value: incident.reporter.name },
+                    { label: "Email", value: incident.reporter.email },
+                    { label: "Phone", value: incident.reporter.phone || "Not provided" },
+                    { label: "MC number", value: incident.reporter.mc_number },
+                  ]}
+                />
+              </div>
+            </div>
+
           </div>
 
           <aside className="student-detail-side">
@@ -195,11 +204,11 @@ function OfficialIncidentDetailContent() {
   );
 }
 
-export default function OfficialIncidentDetailPage() {
+export default function DeanIncidentDetailPage() {
   const params = useParams<{ id: string }>();
   return (
-    <RequireAuth allowedRoles={["OFFICIAL"]}>
-      <OfficialIncidentDetailContent key={params.id} />
+    <RequireAuth allowedRoles={["MANAGEMENT"]}>
+      <DeanIncidentDetailContent key={params.id} />
     </RequireAuth>
   );
 }

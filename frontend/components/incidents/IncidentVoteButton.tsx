@@ -61,7 +61,7 @@ export function IncidentVoteButton({
     }
   }
 
-  const label = hasUpvoted ? "Remove upvote" : "Upvote this incident";
+  const label = hasUpvoted ? "Remove upvote" : "Upvote this case";
 
   return (
     <div className="inline-flex flex-col items-start">
@@ -72,7 +72,7 @@ export function IncidentVoteButton({
         aria-busy={isSubmitting}
         aria-label={`${label}. ${voteCount} ${voteCount === 1 ? "vote" : "votes"}`}
         aria-pressed={isStudent ? hasUpvoted : undefined}
-        title={user && !isStudent ? "Only students can upvote incidents" : label}
+        title={user && !isStudent ? "Only students can upvote public cases" : label}
         className={`incident-vote-button ${hasUpvoted ? "is-active" : ""}`}
       >
         <ArrowBigUp

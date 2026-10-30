@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AdminAssignPanel } from "@/components/admin/AdminAssignPanel";
 import { AdminChangeReviewsDialog } from "@/components/admin/AdminChangeReviewsDialog";
 import { AdminReviewActions } from "@/components/admin/AdminReviewActions";
 import { RequireAuth } from "@/components/auth/RequireAuth";
@@ -12,7 +13,7 @@ import {
   IncidentPageSkeleton,
   IncidentPageState,
 } from "@/components/incidents/IncidentPageState";
-import { IncidentPriorityBadge } from "@/components/incidents/IncidentPriorityBadge";
+import { CasePriorityDisplay } from "@/components/incidents/CasePriorityDisplay";
 import { IncidentRevisionPanel } from "@/components/incidents/IncidentRevisionPanel";
 import { IncidentStatusBadge } from "@/components/incidents/IncidentStatusBadge";
 import { IncidentTimeline } from "@/components/incidents/IncidentTimeline";
@@ -99,7 +100,7 @@ function AdminIncidentFullBody({
             href={`/admin/incidents/${incidentId}?view=full`}
             className="text-sm font-medium text-primary hover:text-primary-dark"
           >
-            View full incident record →
+            View full case record →
           </Link>
         </p>
       </>
@@ -124,9 +125,11 @@ function AdminIncidentFullBody({
           <h1 className="public-incident-title min-w-0 break-words text-[24px] font-semibold leading-tight md:text-[30px]">
             {incident.title}
             <IncidentStatusBadge status={incident.status} />
-            {incident.priority ? (
-              <IncidentPriorityBadge priority={incident.priority} />
-            ) : null}
+            <CasePriorityDisplay
+              officialPriority={incident.priority}
+              reporterPriority={incident.reporter_priority}
+              urgencySource="reporter"
+            />
           </h1>
           <p className="mt-2 text-sm text-text-secondary">
             <span className="font-medium text-foreground">{incident.incident_number}</span>
@@ -143,6 +146,9 @@ function AdminIncidentFullBody({
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <AdminChangeReviewsDialog revisions={incident.revision_history} />
           {!pending ? <AdminReviewActions incident={incident} onUpdated={onUpdated} /> : null}
+          {!pending ? (
+            <AdminAssignPanel incident={incident} onUpdated={onUpdated} />
+          ) : null}
         </div>
       </div>
 

@@ -9,6 +9,13 @@ const API_URL = normalizeApiUrl("/api");
 let csrfToken: string | null = null;
 let csrfRequest: Promise<void> | null = null;
 
+export type SessionBootstrap = {
+  csrfToken: string;
+  user: unknown;
+};
+
+let sessionBootstrapRequest: Promise<SessionBootstrap> | null = null;
+
 type RequestOptions = RequestInit & {
   auth?: boolean;
   json?: boolean;
@@ -26,12 +33,37 @@ class ApiClientError extends Error {
   }
 }
 
+function fetchSessionBootstrap(): Promise<SessionBootstrap> {
+  if (!sessionBootstrapRequest) {
+    sessionBootstrapRequest = (async () => {
+      const response = await fetch(`${API_URL}/auth/session/`, {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => ({}))) as SessionBootstrap & ApiError;
+      if (!response.ok) {
+        throw new ApiClientError(
+          payload.detail?.toString() ?? "Request failed.",
+          response.status,
+          payload,
+        );
+      }
+      csrfToken = payload.csrfToken;
+      return payload;
+    })().finally(() => {
+      sessionBootstrapRequest = null;
+    });
+  }
+  return sessionBootstrapRequest;
+}
+
 async function ensureCsrfToken() {
   if (csrfToken) return;
   if (!csrfRequest) {
-    csrfRequest = request<{ csrfToken: string }>("/auth/session/", { auth: false })
-      .then(data => { csrfToken = data.csrfToken; })
-      .finally(() => { csrfRequest = null; });
+    csrfRequest = fetchSessionBootstrap().then(() => undefined).finally(() => {
+      csrfRequest = null;
+    });
   }
   await csrfRequest;
 }
@@ -102,7 +134,10 @@ export const apiClient = {
     }),
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "DELETE" }),
-  setCsrfToken: (token: string | null) => { csrfToken = token; },
+  setCsrfToken: (token: string | null) => {
+    csrfToken = token;
+  },
+  bootstrapSession: fetchSessionBootstrap,
   getBaseUrl: () => API_URL,
 };
 

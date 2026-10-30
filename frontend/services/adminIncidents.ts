@@ -1,23 +1,19 @@
 import { apiClient } from "@/lib/api";
 import type {
   AdminIncidentReview,
-  AdminReviewStats,
   IncidentDetail,
   PaginatedResponse,
 } from "@/types";
 
 export const adminIncidentService = {
-  getReviewStats: () =>
-    apiClient.get<AdminReviewStats>("/incidents/review-stats/"),
-
   listPendingReview: () =>
     apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/pending-review/"),
 
   listPendingChanges: () =>
     apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/pending-changes/"),
 
-  listForwarded: () =>
-    apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/forwarded-reports/"),
+  listAwaitingAssignment: () =>
+    apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/awaiting-action/"),
 
   listRejected: () =>
     apiClient.get<PaginatedResponse<AdminIncidentReview>>("/incidents/rejected-reports/"),
@@ -38,6 +34,14 @@ export const adminIncidentService = {
 
   rejectChanges: (id: number, comment: string) =>
     apiClient.post<AdminIncidentReview>(`/incidents/${id}/reject-changes/`, { comment }),
+
+  assign: (
+    id: number,
+    payload: { assigned_official: number; priority?: string },
+  ) => apiClient.post<AdminIncidentReview>(`/incidents/${id}/assign/`, payload),
+
+  close: (id: number) =>
+    apiClient.post<AdminIncidentReview>(`/incidents/${id}/close/`, { comment: "" }),
 };
 
 export type { IncidentDetail };

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { siteDevelopers } from "@/lib/siteDevelopers";
+import { SYSTEM_NAME } from "@/lib/terminology";
 
 function GitHubIcon() {
   return (
@@ -17,21 +19,16 @@ function GitHubIcon() {
   );
 }
 
-const developers = [
-  { name: "Oshadha", href: "https://github.com/MHOC96" },
-  { name: "Thevindu", href: "https://github.com/Thevindu23" },
-] as const;
-
 export function Footer() {
   return (
     <footer className="university-footer">
       <div className="site-width portal-footer">
-        <p className="portal-footer-brand">Incident Reporting & Resolution Management System</p>
+        <p className="portal-footer-brand">{SYSTEM_NAME}</p>
 
         <div className="portal-footer-credits">
           <span className="portal-footer-credits-label">Developed by</span>
           <span className="portal-footer-developers">
-            {developers.map((developer, index) => (
+            {siteDevelopers.map((developer, index) => (
               <span key={developer.href} className="portal-footer-developer-item">
                 {index > 0 ? <span className="portal-footer-developer-sep" aria-hidden="true">·</span> : null}
                 <Link

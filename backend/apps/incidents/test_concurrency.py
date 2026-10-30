@@ -30,7 +30,7 @@ class ConcurrentIncidentTests(TransactionTestCase):
 
     def test_concurrent_submissions_create_one_revision(self):
         incident = Incident.objects.create(incident_number="INC-2026-00001", reporter=self.student,
-            category=self.category, location=self.location, title="Old", description="Old", status="FORWARDED_TO_DEAN")
+            category=self.category, location=self.location, title="Old", description="Old", status="NOT_STARTED")
         def submit(_):
             try:
                 client = APIClient()

@@ -151,7 +151,7 @@ export function NotificationBell({ onOpen }: NotificationBellProps) {
               <p className="px-4 py-6 text-sm text-text-secondary">Loading notifications...</p>
             ) : notifications.length === 0 ? (
               <p className="px-4 py-6 text-sm text-text-secondary">
-                No notifications yet. Updates appear here when incident status changes.
+                No notifications yet. Updates appear here when case status changes.
               </p>
             ) : (
               notifications.map((notification) => {

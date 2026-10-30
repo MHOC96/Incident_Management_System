@@ -2,7 +2,6 @@ import { apiClient } from "@/lib/api";
 import type { LoginPayload, PasswordChangePayload, User } from "@/types";
 
 type SessionResponse = { user: User | null; csrfToken: string };
-let sessionRequest: Promise<SessionResponse> | null = null;
 
 export const authService = {
   async login(payload: LoginPayload): Promise<User> {
@@ -12,10 +11,7 @@ export const authService = {
   },
 
   async session(): Promise<SessionResponse> {
-    sessionRequest ??= apiClient.get<SessionResponse>("/auth/session/", { auth: false })
-      .then(data => { apiClient.setCsrfToken(data.csrfToken); return data; })
-      .finally(() => { sessionRequest = null; });
-    return sessionRequest;
+    return apiClient.bootstrapSession() as Promise<SessionResponse>;
   },
 
   async logout() {

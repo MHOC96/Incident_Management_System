@@ -19,9 +19,9 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "USJ Incident Reporting System",
+  title: "FMSC Complaint & Suggestion System",
   description:
-    "University of Sri Jayewardenepura incident reporting and resolution management system.",
+    "Faculty of Management & Commerce — official complaint and suggestion management for USJ.",
   icons: {
     icon: "/sjp-favicon.png",
     apple: "/sjp-favicon.png",

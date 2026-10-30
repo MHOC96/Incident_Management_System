@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { getDashboardLabel } from "@/lib/format";
 import { getDashboardRoute } from "@/lib/routes";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { PUBLIC_NAV_LABEL, SYSTEM_NAME } from "@/lib/terminology";
 
 export function Header() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -25,18 +26,18 @@ export function Header() {
     finally { setSigningOut(false); }
   }
   const menuOpen = openPath === pathname;
+  const reporterRoles = new Set(["STUDENT", "LECTURER"]);
   const navItems = [
-    ...(!isAuthenticated
-      ? [
-          { href: "/", label: "Home" },
-          { href: "/incidents", label: "Public incidents" },
-          { href: "/about", label: "About the service" },
-        ]
-      : [{ href: "/incidents", label: "Public incidents" }]),
+    { href: "/", label: "Home" },
+    { href: "/incidents", label: PUBLIC_NAV_LABEL },
+    ...(!isAuthenticated ? [{ href: "/about", label: "About the service" }] : []),
     ...(isAuthenticated && user
-      ? [{ href: getDashboardRoute(user.role), label: getDashboardLabel(user.role) },
-        ...(user.role === "DEAN" ? [{ href: "/dean/users", label: "Official accounts" }] : []),
-        ...(user.role === "STUDENT" ? [{ href: "/student/incidents/new", label: "Report an incident" }] : [])]
+      ? [
+          { href: getDashboardRoute(user.role), label: getDashboardLabel(user.role) },
+          ...(reporterRoles.has(user.role)
+            ? [{ href: "/student/incidents/new", label: "Report a case" }]
+            : []),
+        ]
       : []),
   ];
   const active = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
@@ -44,10 +45,10 @@ export function Header() {
   return (
     <header className="university-header" onKeyDown={event => { if (event.key === "Escape" && menuOpen) { setOpenPath(null); menuButton.current?.focus(); } }}>
       <div className="utility-bar">
-        <div className="site-width portal-label">Incident Reporting & Resolution Management System</div>
+        <div className="site-width portal-label">{SYSTEM_NAME}</div>
       </div>
       <div className="site-width identity-row">
-        <Link href="/" aria-label="University of Sri Jayewardenepura Incident Reporting home" className="university-logo">
+        <Link href="/" aria-label="University of Sri Jayewardenepura FMSC complaint and suggestion home" className="university-logo">
           <Image src="/sjp-logo-large-trilingual.png" alt="University of Sri Jayewardenepura" width={436} height={83} priority />
         </Link>
         <nav aria-label="Primary navigation" className="desktop-navigation">

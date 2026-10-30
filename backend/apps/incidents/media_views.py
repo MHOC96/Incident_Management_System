@@ -5,7 +5,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.views import APIView
 
 from apps.common.authorization import user_can_view_incident
-from apps.incidents.cloudinary_service import image_delivery_url
+from apps.incidents.cloudinary_service import media_delivery_url
 from apps.incidents.models import IncidentImage
 from apps.incidents.querysets import PUBLIC_VISIBLE_STATUSES
 
@@ -19,4 +19,4 @@ class IncidentImageView(APIView):
         public = incident.visibility == "PUBLIC" and incident.status in PUBLIC_VISIBLE_STATUSES
         if not public and not user_can_view_incident(request.user, incident):
             raise NotFound()
-        return HttpResponseRedirect(image_delivery_url(image))
+        return HttpResponseRedirect(media_delivery_url(image))

@@ -10,9 +10,11 @@ DEFAULT_ROSTER = Path(settings.BASE_DIR) / "data" / "student_roster.csv"
 
 class Command(BaseCommand):
     help = (
-        "Import university student accounts from a roster CSV or Excel file. "
-        "MC number is the username and CPM number is the initial password. "
-        "Existing student passwords are not overwritten."
+        "Import STUDENT role accounts from a roster CSV or Excel file (PDF MVP). "
+        "MC number is the login username and CPM is the initial password; "
+        "passwords are not overwritten for existing students. "
+        "Use seed_fmsc_demo_accounts for other PDF roles and create_staff_user "
+        "for additional staff."
     )
 
     def add_arguments(self, parser):
